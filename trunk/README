@@ -1,0 +1,53 @@
+			ZEITCRAWLER v1.0
+		http://code.google.com/p/zeitcrawler/
+
+
+=== LICENSE ===
+
+This software is brought to you by Adrien Barbaresi.
+It is freely available under the GNU GPL v3 license (http://www.gnu.org/licenses/gpl.html).
+
+The texts gathered uisng this software are for personal (or academic) use only, you cannot republish them.
+The cases which allow for a free use of the texts are listed on this page (in German) :
+http://www.zeitverlag.de/presse/rechte-und-lizenzen/freie-nutzung/
+
+
+=== DESCRIPTION ===
+
+Starting from the front page or from a given list of links, the crawler retrieves newspaper articles and gathers new links to explore as it goes, stripping the text of each article out of the HTML formatting and saving it into a raw text file.
+
+Due to its specialization it is able to build a reliable corpus consisting of texts and relevant metadata (title, author, excerpt, date und url). The links list which comes with the software features about 130.000 articles, which enables to gather more than 100 millions of tokens.
+
+As you can't republish anything but quotations of the texts, the purpose of this tool is to enable others to make their own version of the corpus, as crawling is not explicitly forbidden by the right-holders of Die Zeit.
+
+The crawler does not support multi-threading as this may not be considered a fair use, it takes the links one by one and it is not set up for speed. It may take two or three days to gather a corpus of more than 100.000 articles.
+
+The export in XML format accounts for the compatibility with other software designed to complete a further analysis of the texts, for example the textometry software TXM : http://txm.sourceforge.net/
+
+
+=== FILES ===
+
+There are 5 different scripts and one text file in this release :
+  ⋅ zeitcrawler.pl	[the crawler itself]
+  ⋅ check_flatfile.pl	[to check the integrity of raw text data]
+  ⋅ xmlize.pl		[to make one XML document out of the crawler output]
+  ⋅ fragment+xmlize.pl	[to make a series of XML documents out of the crawler output]
+  ⋅ clean_directory.sh	[to compress the files and remove the original ones]
+  ⋅ ZEIT_list_todo	[a sample link list that may be used as an input for the crawler]
+
+
+=== USAGE ===
+
+Having stored the files in the same directory, here is a possible scenario :
+  1. Edit the file named zeitcrawler.pl to select the number of pages you want to visit.
+  2. Run it (the default setting is to take ZEIT_list_todo as input) as many times as you like.
+  3. Check the integrity of the ZEIT_flatfile by running the check_flatfile.pl script.
+  4. Run xmlize.pl or fragment+xmlize.pl to export the crawl in a (hopefully valid) XML document.
+  5. Clean the directory.
+
+
+=== RESTRICTIONS ===
+
+The crawler was designed to get as little noise as possible. However, it is highly dependant on the content management system and on the HTML markup used by the newspaper Die Zeit. It works by now (July 1st 2012), but it could break on future versions of the website. I may not update it on a regular basis.
+
+All the scripts should work correctly on UNIX-like systems if you set the right permissions. They may need a software like Cygwin (http://www.cygwin.com/) to run on Windows, this case was not tested.
