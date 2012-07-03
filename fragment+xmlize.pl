@@ -6,11 +6,13 @@
 ###	It is freely available under the GNU GPL v3 license (http://www.gnu.org/licenses/gpl.html).
 
 # Function : expects a file named 'ZEIT_flatfile' and converts it to a series of XML documents on a 'one file per text' basis.
-# The files are stored in a subdirectory which must be created before (the default is 'texts').
+# The files are stored in a subdirectory which must already exist (the default is 'texts').
 # Use : without arguments.
 
 # Benefits : compatibility with other software to complete a further analysis of the texts.
 # For example the textometry software TXM : http://txm.sourceforge.net/
+
+## The XML conversion was written with robustness in mind, but it does not provide a handy solution for all possible caveats, especially unicode (bad) character encoding issues. As the input may be a large corpus resulting from a web crawl, this script does not guarantee by design that the XML files will be valid.
 
 
 use strict;
