@@ -1,8 +1,8 @@
 #!/usr/bin/perl
 
 
-###			ZEITCRAWLER v1.0		###
-###		http://code.google.com/p/zeitcrawler/ 	###
+###			ZEITCRAWLER v1.0.1		###
+###		http://code.google.com/p/zeitcrawler/ 		###
 
 ###	This script is brought to you by Adrien Barbaresi.
 ###	It is freely available under the GNU GPL v3 license (http://www.gnu.org/licenses/gpl.html).
@@ -15,7 +15,7 @@
 
 
 ## Use : change the number of pages crawled to fit your needs (the program supports successive executions).
-## Run the script without arguments.
+## Execute the file without arguments.
 
 
 use strict;
@@ -140,8 +140,10 @@ if ($n =~ m/(http:\/\/www\.zeit\.de\/)(.+?)(")/) {
 }
 }
 
+@links = uniq @links;
 
 # Storing and buffering links
+# The use of a buffer saves memory and processing time (especially by frequently occurring links)
 $q=0;
 foreach $n (@links) {
 	if ($q >= 4) {
@@ -150,7 +152,7 @@ foreach $n (@links) {
 	else {
 		$crc = crc32($n);
 		unless (exists $done_crc{$crc}) {
-		push (@links, $n);
+		push (@liste, $n);
 		}
 	}
 	$q++;
@@ -241,6 +243,7 @@ foreach $block (@reihe) {
 	$block =~ m/[A-Z].+?<\/p>/;
 	$block = $&;
 	$block =~ s/<.+?>//g;
+	$block =~ s/^<li.+?$//gs;
 	$block =~ s/\s+/ /g;
 		if (($block =~ m/zeit.de\/musik/) || ($block =~ m/zeit.de\/audio/) || ($block =~ m/\[weiter\?\]/) || ($block =~ m/Lesen Sie hier mehr aus dem Ressort/)) {
 		$block = ();
@@ -256,8 +259,7 @@ if (scalar(@text) > 5) {
 	print OUTPUT "-----\n";
 }
 
-if ( (scalar (@liste) == 0) && (@buffer) ) {
-	@done_crc = sort (@done_crc);
+if ( (scalar @liste == 0) && (@buffer) ) {
 	@buffer = uniq @buffer;
 	foreach $n (@buffer) {
 		$crc = crc32($n);
