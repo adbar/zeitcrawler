@@ -1,4 +1,13 @@
 #!/usr/bin/perl
+
+
+###	This script is part of the zeitcrawler (http://code.google.com/p/zeitcrawler/).
+###	It is brought to you by Adrien Barbaresi.
+###	It is freely available under the GNU GPL v3 license (http://www.gnu.org/licenses/gpl.html).
+
+###	WORK IN PROGRESS !
+
+
 use strict;
 use warnings;
 
