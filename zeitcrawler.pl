@@ -21,10 +21,10 @@
 use strict;
 use warnings;
 #use locale;
-use Encode;
 use LWP::Simple;
-#use String::CRC32; alternative
-use Digest::CRC qw(crc32);
+use utf8;
+use open ':encoding(utf8)';
+use Digest::CRC qw(crc32); #alternative : use String::CRC32;
 use List::MoreUtils qw(uniq);
 
 
@@ -112,27 +112,26 @@ print TRACE "$url\n";
 # Fetch the page (re-encoding not always necessary)
 $urlcorr = "http://www.zeit.de/" . $url . "/komplettansicht";
 $seite = get $urlcorr;
-$seite = encode("utf8", $seite);
 
 
 # Links
 @links = ();
 @temp = split ("<a", $seite);
 foreach $n (@temp) {
-if ($n =~ m/(http:\/\/www\.zeit\.de\/)(.+?)(")/) {
+if ($n =~ m/(http:\/\/www\.zeit\.de\/)(.+?)(")/o) {
 	$link = $2;
-	if ( ($link =~ m/[0-9]{4}-[0-9]{2}/) || ($link =~ m/[0-9]{4}\/[0-9]{2}/) ) {
-		$link =~ s/seite-[0-9]//;
-		$link =~ s/seite-NaN//;
-			if ($link =~ m/\?/) {
-			$link =~ m/(.+?)(\?)/;
+	if ( $link =~ m/\/[0-9]{4}[\/-][0-9]{2}\//o ) { # replacement for if ( ($link =~ m/[0-9]{4}-[0-9]{2}/) || ($link =~ m/[0-9]{4}\/[0-9]{2}/) ) {
+		$link =~ s/seite-[0-9]//o;
+		$link =~ s/seite-NaN//o;
+			if ($link =~ m/\?/o) {
+			$link =~ m/(.+?)(\?)/o;
 			$link = $1;
 			}
-		unless ( ($link =~ m/#/) || ($link =~ m/-box-/) || ($link =~ m/xml/) || ($link =~ m/bildergalerie/) || ($link =~ m/bg-/) || ($link =~ m/Spiele/) || ($link =~ m/quiz/) || ($link =~ m/themen/) || ($link =~ m/index/) ) {
+		unless ($link =~ m/#|-box-|xml|bildergalerie|bg-|Spiele|quiz|themen|index/o) { #replacement for unless ( ($link =~ m/#/) || ($link =~ m/-box-/) || ($link =~ m/xml/) || ($link =~ m/bildergalerie/) || ($link =~ m/bg-/) || ($link =~ m/Spiele/) || ($link =~ m/quiz/) || ($link =~ m/themen/) || ($link =~ m/index/) ) {
 		# Alternative list : unless (($link =~ m/angebote/) || ($link =~ m/\?/) || ($link =~ m/hilfe/) || ($link =~ m/studium/) || ($link =~ m/newsletter/) || ($link =~ m/spiele/) || ($link =~ m/zuender/) || ($link =~ m/bildergalerie/) || ($link =~ m/bg-/) || ($link =~ m/quiz/) || ($link =~ m/rezept/) || ($link =~ m/siebeck/)) {
-			$link =~ s/\/komplettansicht//g;
-			$link =~ s/\/+$//g;
-			$link =~ s/\/[0-9]+//g;
+			$link =~ s/\/komplettansicht$//og; # $ added (faster)
+			$link =~ s/\/+$//og;
+			$link =~ s/\/[0-9]+$//og; # $ added (did not work otherwise)
 			push (@links, $link);
 		#}
 		}
@@ -180,7 +179,7 @@ if (scalar @buffer >= 500) {
 @temp = split ("<!--AB HIER IHR CONTENT-->", $seite);
 $seite = $temp[1];
 
-if ($seite =~ m/class="newcomments zeitkommentare">/) {
+if ($seite =~ m/class="newcomments zeitkommentare">/o) {
 	@temp = split ("<div id=\"comments\" class=\"newcomments zeitkommentare\">", $seite);
 	#@temp = split ("<div id=\"informatives\">", $seite);
 }
@@ -191,12 +190,12 @@ else {
 $seite = $temp[0];
 $info = $temp[1];
 
-$seite =~ m/<span class="title">(.+?)<\/span>/;
+$seite =~ m/<span class="title">(.+?)<\/span>/o;
 $titel = $1;
 $titel = "Titel: " . $titel;
 push (@text, $titel);
 
-$seite =~ m/<p class="excerpt">(.+?)<\/p>/;
+$seite =~ m/<p class="excerpt">(.+?)<\/p>/o;
 $excerpt = $1;
 $excerpt = "Excerpt: " . $excerpt;
 push (@text, $excerpt);
@@ -205,7 +204,7 @@ if ($info =~ m/<li itemprop="author" content="([A-Za-zÄÖÜäöüß ]+)"/) {
 	$autor = $1;
 }
 else {
-	if ($info =~ m/<strong>Von<\/strong>([A-Za-zÄÖÜäöüß ]+)<\/li>/) {
+	if ($info =~ m/<strong>Von<\/strong>([A-Za-zÄÖÜäöüß ]+)<\/li>/o) {
 	$autor = $1;
 	}
 	else {
@@ -215,7 +214,7 @@ else {
 $autor = "Autor: " . $autor;
 push (@text, $autor);
 
-$info =~ m/<li itemprop="datePublished" content="([0-9]+\.[0-9]+\.[0-9]+)/;
+$info =~ m/<li itemprop="datePublished" content="([0-9]+\.[0-9]+\.[0-9]+)/o;
 $datum = $1;
 $datum = "Datum: " . $datum;
 push (@text, $datum);
@@ -226,26 +225,26 @@ push (@text, "url: $url\n");
 # Extraction of the text itself
 # Using regular expressions, there might be a more efficient way to do this.
 
-if ($seite =~ m/<div class="block">/) {
-$seite =~ s/.+<div class="block">//;
+if ($seite =~ m/<div class="block">/o) {
+$seite =~ s/.+<div class="block">//o;
 }
 else {
-$seite =~ s/.+class="article">//;
+$seite =~ s/.+class="article">//o;
 }
 @reihe = split ("<p>", $seite);
 splice (@reihe,0,1);
 
 foreach $block (@reihe) {
 	#next if $block eq "</p>";
-	$block =~ s/<p class="caption">.+?<\/p>//;
-	$block =~ s/\n+//g;
-	$block =~ s/^\s+//g;
-	$block =~ m/[A-Z].+?<\/p>/;
+	$block =~ s/<p class="caption">.+?<\/p>//o;
+	$block =~ s/\n+//og;
+	$block =~ m/[A-Z].+?<\/p>/o;
 	$block = $&;
-	$block =~ s/<.+?>//g;
-	$block =~ s/^<li.+?$//gs;
-	$block =~ s/\s+/ /g;
-		if (($block =~ m/zeit.de\/musik/) || ($block =~ m/zeit.de\/audio/) || ($block =~ m/\[weiter\?\]/) || ($block =~ m/Lesen Sie hier mehr aus dem Ressort/)) {
+	$block =~ s/<.+?>//og;
+	$block =~ s/^\s+//og; # moved because of execution time
+	$block =~ s/^<li.+?$//ogs;
+	$block =~ s/\s+/ /og;
+		if (($block =~ m/zeit.de\/musik/o) || ($block =~ m/zeit.de\/audio/o) || ($block =~ m/\[weiter\?\]/o) || ($block =~ m/Lesen Sie hier mehr aus dem Ressort/o)) {
 		$block = ();
 		}
 	push (@text, $block) if defined ($block);
