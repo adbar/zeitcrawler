@@ -24,7 +24,8 @@ use warnings;
 use LWP::Simple;
 use utf8;
 use open ':encoding(utf8)';
-use Digest::CRC qw(crc32); #alternative : use String::CRC32;
+use String::CRC32; # probably needs to be installed, e.g. using the CPAN console or directly with the Debian/Ubuntu package libstring-crc32-perl
+
 
 
 # Init
