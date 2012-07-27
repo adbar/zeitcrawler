@@ -25,7 +25,6 @@ use LWP::Simple;
 use utf8;
 use open ':encoding(utf8)';
 use Digest::CRC qw(crc32); #alternative : use String::CRC32;
-use List::MoreUtils qw(uniq);
 
 
 # Init
@@ -35,7 +34,7 @@ my $recup = "index";
 my $number = 1000;
 
 my $runs = 1;
-my ($url, $urlcorr, $block, $seite, $n, @text, $titel, $excerpt, $info, $autor, $datum, @reihe, $link, @links, @temp, @done, $line);
+my ($url, $urlcorr, $block, $seite, $n, @text, $titel, $excerpt, $info, $autor, $datum, @reihe, $link, @links, @temp, @done, $line, %seen);
 my (@buffer, $q);
 my ($crc, @done_crc, $links_crc);
 
@@ -77,7 +76,8 @@ my $i = 0;
 	push (@liste, $_);
 	}
 	}
-@liste = uniq @liste;
+%seen = ();
+@liste = grep { ! $seen{ $_ }++ } @liste; # remove duplicates (fast)
 close (LINKS) or die;
 }
 
@@ -139,7 +139,8 @@ if ($n =~ m/(http:\/\/www\.zeit\.de\/)(.+?)(")/o) {
 }
 }
 
-@links = uniq @links;
+%seen = ();
+@links = grep { ! $seen{ $_ }++ } @links; # remove duplicates (fast)
 
 # Storing and buffering links
 # The use of a buffer saves memory and processing time (especially by frequently occurring links)
@@ -160,7 +161,8 @@ foreach $n (@links) {
 
 # Buffer control
 if (scalar @buffer >= 500) {
-	@buffer = uniq @buffer;
+	%seen = ();
+	@buffer = grep { ! $seen{ $_ }++ } @buffer; # remove duplicates (fast)
 	foreach $n (@buffer) {
 		$crc = crc32($n);
 		unless (exists $done_crc{$crc}) {
@@ -170,7 +172,8 @@ if (scalar @buffer >= 500) {
 	@buffer = ();
 }
 
-@liste = uniq @liste;
+%seen = ();
+@liste = grep { ! $seen{ $_ }++ } @liste; # remove duplicates (fast)
 
 
 # Extraction of metadata
@@ -259,7 +262,8 @@ if (scalar(@text) > 5) {
 }
 
 if ( (scalar @liste == 0) && (@buffer) ) {
-	@buffer = uniq @buffer;
+	%seen = ();
+	@buffer = grep { ! $seen{ $_ }++ } @buffer; # remove duplicates (fast)
 	foreach $n (@buffer) {
 		$crc = crc32($n);
 		unless (exists $done_crc{$crc}) {
@@ -267,7 +271,8 @@ if ( (scalar @liste == 0) && (@buffer) ) {
 		}
 	}
 	@buffer = ();
-	@liste = uniq @liste;
+	%seen = ();
+	@liste = grep { ! $seen{ $_ }++ } @liste; # remove duplicates (fast)
 }
 
 if ( (scalar (@liste) == 0) && (scalar (@buffer) == 0) ) {
@@ -294,7 +299,8 @@ if (@buffer) {
 	push (@liste, @buffer);
 	print "Buffer stored\n";
 }
-@liste = uniq (@liste);
+%seen = ();
+@liste = grep { ! $seen{ $_ }++ } @liste; # remove duplicates (fast)
 foreach $n (@liste) {
 print LINKS "$n\n";
 }
