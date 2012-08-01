@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 
-###			ZEITCRAWLER v1.0.1		###
+###			ZEITCRAWLER v1.1		###
 ###		http://code.google.com/p/zeitcrawler/ 		###
 
 ###	This script is brought to you by Adrien Barbaresi.
@@ -32,7 +32,7 @@ use String::CRC32; # probably needs to be installed, e.g. using the CPAN console
 my $recup = "index";
 
 # Change number of pages crawled at a time here
-my $number = 1000;
+my $number = 100;
 
 my $runs = 1;
 my ($url, $urlcorr, $block, $seite, $n, @text, $titel, $excerpt, $info, $autor, $datum, @reihe, $link, @links, @temp, @done, $line, %seen);
@@ -47,7 +47,7 @@ my $done = '>>ZEIT_list_done';
 open (DONE, $done);
 
 ##Loading...
-print "Initialisation...\n";
+print "Initialization...\n";
 
 my $done_crc = 'ZEIT_list_done_crc';
 my %done_crc;
@@ -177,6 +177,7 @@ if (scalar @buffer >= 500) {
 @liste = grep { ! $seen{ $_ }++ } @liste; # remove duplicates (fast)
 
 
+unless ($url eq $recup) { # do not process the index page
 # Extraction of metadata
 # All this part is based on regular expressions, which is not recommended when crawling in the wild.
 
@@ -193,6 +194,8 @@ else {
 
 $seite = $temp[0];
 $info = $temp[1];
+
+{ no warnings 'uninitialized'; # do not display any warning of the selection is empty
 
 $seite =~ m/<span class="title">(.+?)<\/span>/o;
 $titel = $1;
@@ -261,6 +264,8 @@ if (scalar(@text) > 5) {
 	}
 	print OUTPUT "-----\n";
 }
+} # end of 'do not display any warning of the selection is empty'
+} # end of 'do not process the index page'
 
 if ( (scalar @liste == 0) && (@buffer) ) {
 	%seen = ();

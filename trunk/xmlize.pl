@@ -1,14 +1,12 @@
 #!/usr/bin/perl
 
 
-###	This script is part of the zeitcrawler (http://code.google.com/p/zeitcrawler/).
+###	This script is part of the Zeitcrawler v1.1 (http://code.google.com/p/zeitcrawler/).
 ###	It is brought to you by Adrien Barbaresi.
 ###	It is freely available under the GNU GPL v3 license (http://www.gnu.org/licenses/gpl.html).
 
 # Function : expects a file named "ZEIT_flatfile" and converts it to a (hopefully valid) XML file named "ZEIT_crawl.xml".
 # Use : without arguments
-
-## The XML conversion was written with robustness in mind, but it does not provide a handy solution for all possible caveats, especially unicode (bad) character encoding issues. As the input may be a large corpus resulting from a web crawl, this script does not guarantee by design that the XML file will be valid.
 
 
 use strict;
