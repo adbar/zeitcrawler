@@ -1,4 +1,4 @@
-			ZEITCRAWLER v1.0
+			ZEITCRAWLER v1.1
 		http://code.google.com/p/zeitcrawler/
 
 
@@ -53,3 +53,8 @@ The crawler was designed to get as little noise as possible. However, it is high
 The XML conversion was written with robustness in mind, but it does not provide a handy solution for all possible caveats, especially unicode (bad) character encoding issues. As the input may be a large corpus resulting from a web crawl, the scripts do not guarantee by design that the XML file will be valid.
 
 All the scripts should work correctly on UNIX-like systems if you set the right permissions. They may need a software like Cygwin (http://www.cygwin.com/) to run on Windows, this case was not tested.
+
+
+=== CHANGELOG ===
+
+1st August 2012 : v1.1 – Speed and memory use improvements for the crawler : replacement of the CRC function, better and reordered regular expressions, use of a hash to remove duplicates, the text is only re-encoded when written to a file, a few bugs removed.

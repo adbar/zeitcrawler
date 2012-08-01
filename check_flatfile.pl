@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 
-###	This script is part of the zeitcrawler (http://code.google.com/p/zeitcrawler/).
+###	This shell script is part of the Zeitcrawler v1.1 (http://code.google.com/p/zeitcrawler/).
 ###	It is brought to you by Adrien Barbaresi.
 ###	It is freely available under the GNU GPL v3 license (http://www.gnu.org/licenses/gpl.html).
 
@@ -11,7 +11,7 @@
 
 use strict;
 use List::MoreUtils qw(uniq);
-use Digest::CRC qw(crc32);
+use String::CRC32;
 
 
 my $input = "ZEIT_flatfile";
