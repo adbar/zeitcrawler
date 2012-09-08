@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 
-###			ZEITCRAWLER v1.1		###
+###			ZEITCRAWLER v1.2		###
 ###		http://code.google.com/p/zeitcrawler/ 		###
 
 ###	This script is brought to you by Adrien Barbaresi.
@@ -21,12 +21,15 @@
 use strict;
 use warnings;
 #use locale;
-use LWP::Simple;
+use LWP::UserAgent;
+use base 'HTTP::Message';
+require Compress::Zlib;
 use utf8;
 use open ':encoding(utf8)';
 use String::CRC32; # probably needs to be installed, e.g. using the CPAN console or directly with the Debian/Ubuntu package libstring-crc32-perl
 
 
+### TO DO : arguments, subs
 
 # Init
 my $recup = "index";
@@ -34,53 +37,53 @@ my $recup = "index";
 # Change number of pages crawled at a time here
 my $number = 100;
 
-my $runs = 1;
-my ($url, $urlcorr, $block, $seite, $n, @text, $titel, $excerpt, $info, $autor, $datum, @reihe, $link, @links, @temp, @done, $line, %seen);
-my (@buffer, $q);
-my ($crc, @done_crc, $links_crc);
+# configuring the LWP agent
+my ($request, $result);
+my $ua = LWP::UserAgent->new;
+my $can_accept = HTTP::Message::decodable;
+$ua->agent("ZeitCrawler/1.2");
+$ua->timeout(10);
 
-my $output = ">>ZEIT_flatfile";
-open (OUTPUT, $output) or die;
-my $record = '>>ZEIT_log';
-open (TRACE, $record) or die;
-my $done = '>>ZEIT_list_done';
-open (DONE, $done);
+my $runs = 1;
+my ($url, $urlcorr, $block, $seite, $n, @text, $titel, $excerpt, $info, $autor, $datum, @reihe, $link, @links, @temp, %seen, @buffer, $q, $crc);
+
 
 ##Loading...
 print "Initialization...\n";
 
-my $done_crc = 'ZEIT_list_done_crc';
+my $done_crc_file = 'ZEIT_list_done_crc';
 my %done_crc;
-if (-e $done_crc) {
-open (DONE_CRC, $done_crc) or die;
-$line = 0;
-	while (<DONE_CRC>) {
-	chomp;
-	$done_crc{$_}++;
-	$done_crc[$line] = $_;
-	$line++;
+if (-e $done_crc_file) {
+	open (my $done_crc_read, '<', $done_crc_file) or die "Cannot open list-done-crc file: $!\n";
+	while (<$done_crc_read>) {
+		chomp;
+		$done_crc{$_}++;
 	}
-close (DONE_CRC) or die;
+	close ($done_crc_read) or die;
 }
 
-my $links = 'ZEIT_list_todo';
+my $links_file = 'ZEIT_list_todo';
 my @liste;
-if (-e $links) {
-open (LINKS, $links) or die;
-my $i = 0;
-	while (<LINKS>) {
-	chomp;
-	$_ =~ s/\/komplettansicht.*$//;
-	$_ =~ s/\/+$//;
-	$crc = crc32($_);
-	unless (exists $done_crc{$crc}) {
-	push (@liste, $_);
+if (-e $links_file) {
+	open (my $links, '<', $links_file) or die "Cannot open list-todo file: $!\n";
+	my $i = 0;
+	while (<$links>) {
+		chomp;
+		$_ =~ s/\/komplettansicht.*$//;
+		$_ =~ s/\/+$//;
+		$crc = crc32($_);
+		unless (exists $done_crc{$crc}) {
+			push (@liste, $_);
+		}
 	}
-	}
-%seen = ();
-@liste = grep { ! $seen{ $_ }++ } @liste; # remove duplicates (fast)
-close (LINKS) or die;
+	%seen = ();
+	@liste = grep { ! $seen{ $_ }++ } @liste; # remove duplicates (fast)
+	close ($links) or die;
 }
+
+open (my $output, '>>', 'ZEIT_flatfile') or die "Cannot open output file: $!\n";
+open (my $log, '>>', 'ZEIT_log') or die "Cannot open log file: $!\n";
+open (my $done, '>>', 'ZEIT_list_done') or die "Cannot open list-done file: $!\n";
 
 
 # Begin of the main loop
@@ -88,67 +91,77 @@ close (LINKS) or die;
 print "run -- list -- buffer\n";
 while ($runs <= $number) {
 
-if (@liste) {
-$url = splice (@liste, 0, 1);
-}
-else {
-$url = $recup;
-}
+  if (@liste) {
+  	$url = splice (@liste, 0, 1);
+  }
+  else {
+	$url = $recup;
+  }
 
-push (@done_crc, crc32($url));
-$done_crc{crc32($url)}++;
-print DONE $url, "\n";
+  $done_crc{crc32($url)}++;
+  print $done $url, "\n";
 
-# Change output frequency here :
-if ($runs%10 == 0) {
-print $runs, "\t"; print scalar (@liste), "\t"; print scalar (@buffer), "\n";
-}
+  # Change output frequency here :
+  if ($runs%10 == 0) {
+	print $runs, "\t"; print scalar (@liste), "\t"; print scalar (@buffer), "\n";
+  }
 
-print TRACE "$runs\t"; print TRACE scalar (@liste), "\n";
-print TRACE "$url\n";
-@text = ();
-
+  print $log "$runs\t"; print $log scalar (@liste), "\n";
+  print $log "$url\n";
+  @text = ();
 
 
-# Fetch the page (re-encoding not always necessary)
-$urlcorr = "http://www.zeit.de/" . $url . "/komplettansicht";
-$seite = get $urlcorr;
+
+  # Fetch the page (re-encoding not always necessary)
+  $urlcorr = "http://www.zeit.de/" . $url . "/komplettansicht";
+  my $req = HTTP::Request->new(GET => $urlcorr);
+  $req->header(
+	'Accept' => 'text/html',
+	'Accept-Encoding' => $can_accept,
+  );
+  $result = $ua->request($request);
+  if ($result->is_success) {
+	$seite = $result->decoded_content; #(charset => 'none')
+  }
+  else {
+	next;
+  }
 
 
-# Links
-@links = ();
-@temp = split ("<a", $seite);
-foreach $n (@temp) {
-if ($n =~ m/(http:\/\/www\.zeit\.de\/)(.+?)(")/o) {
-	$link = $2;
-	if ( $link =~ m/\/[0-9]{4}[\/-][0-9]{2}\//o ) { # replacement for if ( ($link =~ m/[0-9]{4}-[0-9]{2}/) || ($link =~ m/[0-9]{4}\/[0-9]{2}/) ) {
-		$link =~ s/seite-[0-9]//o;
-		$link =~ s/seite-NaN//o;
+  # Links
+  @links = ();
+  @temp = split ("<a", $seite);
+  foreach $n (@temp) {
+	if ($n =~ m/(http:\/\/www\.zeit\.de\/)(.+?)(")/o) {
+		$link = $2;
+		if ( $link =~ m/\/[0-9]{4}[\/-][0-9]{2}\//o ) { # replacement for if ( ($link =~ m/[0-9]{4}-[0-9]{2}/) || ($link =~ m/[0-9]{4}\/[0-9]{2}/) ) {
+			$link =~ s/seite-[0-9]//o;
+			$link =~ s/seite-NaN//o;
 			if ($link =~ m/\?/o) {
-			$link =~ m/(.+?)(\?)/o;
-			$link = $1;
+				$link =~ m/(.+?)(\?)/o;
+				$link = $1;
 			}
-		unless ($link =~ m/#|-box-|xml|bildergalerie|bg-|Spiele|quiz|themen|index/o) { #replacement for unless ( ($link =~ m/#/) || ($link =~ m/-box-/) || ($link =~ m/xml/) || ($link =~ m/bildergalerie/) || ($link =~ m/bg-/) || ($link =~ m/Spiele/) || ($link =~ m/quiz/) || ($link =~ m/themen/) || ($link =~ m/index/) ) {
-		# Alternative list : unless (($link =~ m/angebote/) || ($link =~ m/\?/) || ($link =~ m/hilfe/) || ($link =~ m/studium/) || ($link =~ m/newsletter/) || ($link =~ m/spiele/) || ($link =~ m/zuender/) || ($link =~ m/bildergalerie/) || ($link =~ m/bg-/) || ($link =~ m/quiz/) || ($link =~ m/rezept/) || ($link =~ m/siebeck/)) {
-			$link =~ s/\/komplettansicht$//og; # $ added (faster)
-			$link =~ s/\/+$//og;
-			$link =~ s/\/[0-9]+$//og; # $ added (did not work otherwise)
-			push (@links, $link);
+			unless ($link =~ m/#|-box-|xml|bildergalerie|bg-|Spiele|quiz|themen|index/o) {
+				$link =~ s/\/komplettansicht$//og; # $ added (faster)
+				$link =~ s/\/+$//og;
+				$link =~ s/\/[0-9]+$//og; # $ added (did not work otherwise)
+				push (@links, $link);
 		#}
+			}
 		}
 	}
-}
-}
+  }
 
-%seen = ();
-@links = grep { ! $seen{ $_ }++ } @links; # remove duplicates (fast)
 
-# Storing and buffering links
-# The use of a buffer saves memory and processing time (especially by frequently occurring links)
-$q=0;
-foreach $n (@links) {
+  %seen = ();
+  @links = grep { ! $seen{ $_ }++ } @links; # remove duplicates (fast)
+
+  # Storing and buffering links
+  # The use of a buffer saves memory and processing time (especially by frequently occurring links)
+  $q=0;
+  foreach $n (@links) {
 	if ($q >= 4) {
-	push (@buffer, $n);
+		push (@buffer, $n);
 	}
 	else {
 		$crc = crc32($n);
@@ -157,11 +170,11 @@ foreach $n (@links) {
 		}
 	}
 	$q++;
-}
+  }
 
 
-# Buffer control
-if (scalar @buffer >= 500) {
+  # Buffer control
+  if (scalar @buffer >= 500) {
 	%seen = ();
 	@buffer = grep { ! $seen{ $_ }++ } @buffer; # remove duplicates (fast)
 	foreach $n (@buffer) {
@@ -171,77 +184,76 @@ if (scalar @buffer >= 500) {
 		}
 	}
 	@buffer = ();
-}
+  }
 
-%seen = ();
-@liste = grep { ! $seen{ $_ }++ } @liste; # remove duplicates (fast)
+  %seen = ();
+  @liste = grep { ! $seen{ $_ }++ } @liste; # remove duplicates (fast)
 
 
-unless ($url eq $recup) { # do not process the index page
-# Extraction of metadata
-# All this part is based on regular expressions, which is not recommended when crawling in the wild.
+  unless ($url eq $recup) { # do not process the index page
+  # Extraction of metadata
+  # All this part is based on regular expressions, which is not recommended when crawling in the wild.
 
-@temp = split ("<!--AB HIER IHR CONTENT-->", $seite);
-$seite = $temp[1];
+  @temp = split ("<!--AB HIER IHR CONTENT-->", $seite);
+  $seite = $temp[1];
 
-if ($seite =~ m/class="newcomments zeitkommentare">/o) {
+  if ($seite =~ m/class="newcomments zeitkommentare">/o) {
 	@temp = split ("<div id=\"comments\" class=\"newcomments zeitkommentare\">", $seite);
-	#@temp = split ("<div id=\"informatives\">", $seite);
-}
-else {
+  }
+  else {
 	@temp = split ("<div id=\"informatives\">", $seite);
-}
+  }
 
-$seite = $temp[0];
-$info = $temp[1];
+  $seite = $temp[0];
+  $info = $temp[1];
 
-{ no warnings 'uninitialized'; # do not display any warning of the selection is empty
+  { no warnings 'uninitialized'; # do not display any warning of the selection is empty
 
-$seite =~ m/<span class="title">(.+?)<\/span>/o;
-$titel = $1;
-$titel = "Titel: " . $titel;
-push (@text, $titel);
+  $seite =~ m/<span class="title">(.+?)<\/span>/o;
+  $titel = $1;
+  $titel = "Titel: " . $titel;
+  push (@text, $titel);
 
-$seite =~ m/<p class="excerpt">(.+?)<\/p>/o;
-$excerpt = $1;
-$excerpt = "Excerpt: " . $excerpt;
-push (@text, $excerpt);
+  $seite =~ m/<p class="excerpt">(.+?)<\/p>/o;
+  $excerpt = $1;
+  $excerpt = "Excerpt: " . $excerpt;
+  push (@text, $excerpt);
 
-if ($info =~ m/<li itemprop="author" content="([A-Za-zÄÖÜäöüß ]+)"/) {
+  if ($info =~ m/<li itemprop="author" content="([A-Za-zÄÖÜäöüß ]+)"/) {
 	$autor = $1;
-}
-else {
+  }
+  else {
 	if ($info =~ m/<strong>Von<\/strong>([A-Za-zÄÖÜäöüß ]+)<\/li>/o) {
 	$autor = $1;
 	}
 	else {
 		$autor = "";
 	}
-}
-$autor = "Autor: " . $autor;
-push (@text, $autor);
+  }
+  $autor = "Autor: " . $autor;
+  push (@text, $autor);
 
-$info =~ m/<li itemprop="datePublished" content="([0-9]+\.[0-9]+\.[0-9]+)/o;
-$datum = $1;
-$datum = "Datum: " . $datum;
-push (@text, $datum);
+  $info =~ m/<li itemprop="datePublished" content="([0-9]+\.[0-9]+\.[0-9]+)/o;
+  $datum = $1;
+  $datum = "Datum: " . $datum;
+  push (@text, $datum);
 
-push (@text, "url: $url\n");
+  push (@text, "url: $url\n");
 
 
-# Extraction of the text itself
-# Using regular expressions, there might be a more efficient way to do this.
+  # Extraction of the text itself
+  # Using regular expressions, there might be a more efficient way to do this.
 
-if ($seite =~ m/<div class="block">/o) {
-$seite =~ s/.+<div class="block">//o;
-}
-else {
-$seite =~ s/.+class="article">//o;
-}
-@reihe = split ("<p>", $seite);
-splice (@reihe,0,1);
+  if ($seite =~ m/<div class="block">/o) {
+  $seite =~ s/.+<div class="block">//o;
+  }
+  else {
+  $seite =~ s/.+class="article">//o;
+  }
+  @reihe = split ("<p>", $seite);
+  splice (@reihe,0,1);
 
-foreach $block (@reihe) {
+  foreach $block (@reihe) {
 	#next if $block eq "</p>";
 	$block =~ s/<p class="caption">.+?<\/p>//o;
 	$block =~ s/\n+//og;
@@ -257,17 +269,17 @@ foreach $block (@reihe) {
 	push (@text, $block) if defined ($block);
 	}
 
-# Does not print out an empty text
-if (scalar(@text) > 5) {
+  # Does not print out an empty text
+  if (scalar(@text) > 5) {
 	foreach $n (@text) {
-		print OUTPUT "$n\n";
+		print $output "$n\n";
 	}
-	print OUTPUT "-----\n";
-}
-} # end of 'do not display any warning of the selection is empty'
-} # end of 'do not process the index page'
+	print $output "-----\n";
+  }
+  } # end of 'do not display any warning if the selection is empty'
+  } # end of 'do not process the index page'
 
-if ( (scalar @liste == 0) && (@buffer) ) {
+  if ( (scalar @liste == 0) && (@buffer) ) {
 	%seen = ();
 	@buffer = grep { ! $seen{ $_ }++ } @buffer; # remove duplicates (fast)
 	foreach $n (@buffer) {
@@ -279,38 +291,32 @@ if ( (scalar @liste == 0) && (@buffer) ) {
 	@buffer = ();
 	%seen = ();
 	@liste = grep { ! $seen{ $_ }++ } @liste; # remove duplicates (fast)
-}
+  }
 
-if ( (scalar (@liste) == 0) && (scalar (@buffer) == 0) ) {
-last;
-}
+  if ( (scalar (@liste) == 0) && (scalar (@buffer) == 0) ) {
+  last;
+  }
 
-$runs++;
+  $runs++;
 }
 
 # End of processing, saving lists 
-close (OUTPUT);
-close (DONE);
+close ($output);
+close ($done);
 
-$done_crc = '>ZEIT_list_done_crc';
-open (DONE_CRC, $done_crc);
-foreach $n (@done_crc) {
-print DONE_CRC "$n\n";
-}
-close (DONE_CRC);
+open (my $done_crc_write, '>', $done_crc_file) or die "Cannot open list-done-crc file (no write access ?) : $!\n";
+print $done_crc_write join("\n", keys %done_crc);
+close ($done_crc_write);
 
-$links = '>ZEIT_list_todo';
-open (LINKS, $links) or die;
+open (my $todo_write, '>', $links_file) or die "Cannot open list-todo file (no write access ?) : $!\n";
 if (@buffer) {
 	push (@liste, @buffer);
 	print "Buffer stored\n";
 }
 %seen = ();
 @liste = grep { ! $seen{ $_ }++ } @liste; # remove duplicates (fast)
-foreach $n (@liste) {
-print LINKS "$n\n";
-}
-close (LINKS);
+print $todo_write join("\n", @liste);
+close ($todo_write);
 
-print TRACE "***************\n";
-close (TRACE);
+print $log "***************\n";
+close ($log);
