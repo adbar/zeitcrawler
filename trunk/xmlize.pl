@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 
-###	This script is part of the Zeitcrawler v1.1 (http://code.google.com/p/zeitcrawler/).
+###	This script is part of the Zeitcrawler v1.2 (http://code.google.com/p/zeitcrawler/).
 ###	It is brought to you by Adrien Barbaresi.
 ###	It is freely available under the GNU GPL v3 license (http://www.gnu.org/licenses/gpl.html).
 
