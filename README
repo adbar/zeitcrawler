@@ -1,4 +1,4 @@
-			ZEITCRAWLER v1.1
+			ZEITCRAWLER v1.2
 		http://code.google.com/p/zeitcrawler/
 
 
@@ -20,20 +20,26 @@ Due to its specialization it is able to build a reliable corpus consisting of te
 
 As you can't republish anything but quotations of the texts, the purpose of this tool is to enable others to make their own version of the corpus, as crawling is not explicitly forbidden by the right-holders of Die Zeit.
 
-The crawler does not support multi-threading as this may not be considered a fair use, it takes the links one by one and it is not set up for speed. It may take two or three days to gather a corpus of more than 100.000 articles.
+The crawler does not support multi-threading as this may not be considered a fair use, it takes the links one by one and it is not set up for speed. It may take at least two or three days to gather a corpus of more than 100.000 articles.
 
 The export in XML format accounts for the compatibility with other software designed to complete a further analysis of the texts, for example the textometry software TXM : http://txm.sourceforge.net/
 
 
 === FILES ===
 
-There are 5 different scripts and one text file in this release :
+There are 4 different scripts and one text file in this release related to the crawler itself :
+
+  ⋅ check_flatfile.pl	[check the integrity of raw text data]
+  ⋅ clean_directory.sh	[compress the files and remove the original ones]
+  ⋅ merge_flatfiles.pl	[duplicate detection based on title and excerpt]
   ⋅ zeitcrawler.pl	[the crawler itself]
-  ⋅ check_flatfile.pl	[to check the integrity of raw text data]
-  ⋅ xmlize.pl		[to make one XML document out of the crawler output]
-  ⋅ fragment+xmlize.pl	[to make a series of XML documents out of the crawler output]
-  ⋅ clean_directory.sh	[to compress the files and remove the original ones]
   ⋅ ZEIT_list_todo	[a sample list of links that may be used as an input for the crawler]
+
+The following scripts allow for a conversion to frequent corpus formats :
+
+  ⋅ fragment+xmlize.pl	[make a series of XML documents out of the crawler output]
+  ⋅ xmlize.pl		[make one XML document out of the crawler output]
+  · CWB-XML_tag+join.sh	[together with two Perl scripts, experimental version towards an import into CWB]
 
 
 === USAGE ===
@@ -48,7 +54,7 @@ Having stored the files in the same directory, here is a possible scenario :
 
 === RESTRICTIONS ===
 
-The crawler was designed to get as little noise as possible. However, it is highly dependant on the content management system and on the HTML markup used by the newspaper Die Zeit. It worked by July 1st 2012, but it could break on future versions of the website. I may not update it on a regular basis.
+The crawler was designed to get as little noise as possible. However, it is highly dependent on the content management system and on the HTML markup used by the newspaper Die Zeit. It worked by July 1st 2012, but it could break on future versions of the website. I may not update it on a regular basis.
 
 The XML conversion was written with robustness in mind, but it does not provide a handy solution for all possible caveats, especially unicode (bad) character encoding issues. As the input may be a large corpus resulting from a web crawl, the scripts do not guarantee by design that the XML file will be valid.
 
@@ -57,4 +63,5 @@ All the scripts should work correctly on UNIX-like systems if you set the right 
 
 === CHANGELOG ===
 
+22nd March 2013 : v1.2 - Small efficiency improvements, script to remove duplicates added, experimental version of a conversion to CWB format added, updated list of links.
 1st August 2012 : v1.1 – Speed and memory use improvements for the crawler : replacement of the CRC function, better and reordered regular expressions, use of a hash to remove duplicates, the text is only re-encoded when written to a file, a few bugs removed.

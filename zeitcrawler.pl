@@ -14,7 +14,7 @@
 ###	http://www.zeitverlag.de/presse/rechte-und-lizenzen/freie-nutzung/
 
 
-## Use : change the number of pages crawled to fit your needs (the program supports successive executions).
+## Use : change the number of pages crawled to fit your needs (the script supports successive executions).
 ## Execute the file without arguments.
 
 
@@ -26,10 +26,13 @@ use base 'HTTP::Message';
 require Compress::Zlib;
 use utf8;
 use open ':encoding(utf8)';
-use String::CRC32; # probably needs to be installed, e.g. using the CPAN console or directly with the Debian/Ubuntu package libstring-crc32-perl
+use Digest::MD5 qw(md5_base64);
 
 
-### TO DO : arguments, subs
+### TODO :
+# add arguments
+# add subroutines
+
 
 # Init
 my $recup = "index";
@@ -37,29 +40,34 @@ my $recup = "index";
 # Change number of pages crawled at a time here
 my $number = 100;
 
+# md5 length
+my $md5length = 8;
+
+# sleep value
+my $sleep = 1;
+
 # configuring the LWP agent
-my ($request, $result);
 my $ua = LWP::UserAgent->new;
 my $can_accept = HTTP::Message::decodable;
 $ua->agent("ZeitCrawler/1.2");
 $ua->timeout(10);
 
 my $runs = 1;
-my ($url, $urlcorr, $block, $seite, $n, @text, $titel, $excerpt, $info, $autor, $datum, @reihe, $link, @links, @temp, %seen, @buffer, $q, $crc);
+my ($url, $urlcorr, $block, $seite, $n, @text, $titel, $excerpt, $info, $autor, $datum, @reihe, $link, @links, @temp, %seen, @buffer, $q, $md5);
 
 
 ##Loading...
 print "Initialization...\n";
 
-my $done_crc_file = 'ZEIT_list_done_crc';
-my %done_crc;
-if (-e $done_crc_file) {
-	open (my $done_crc_read, '<', $done_crc_file) or die "Cannot open list-done-crc file: $!\n";
-	while (<$done_crc_read>) {
+my $done_md5_file = 'ZEIT_list_done_md5';
+my %done_md5;
+if (-e $done_md5_file) {
+	open (my $done_md5_read, '<', $done_md5_file) or die "Cannot open list-done-md5 file: $!\n";
+	while (<$done_md5_read>) {
 		chomp;
-		$done_crc{$_}++;
+		$done_md5{$_} = ();
 	}
-	close ($done_crc_read) or die;
+	close ($done_md5_read) or die;
 }
 
 my $links_file = 'ZEIT_list_todo';
@@ -71,8 +79,8 @@ if (-e $links_file) {
 		chomp;
 		$_ =~ s/\/komplettansicht.*$//;
 		$_ =~ s/\/+$//;
-		$crc = crc32($_);
-		unless (exists $done_crc{$crc}) {
+		$md5 = substr(md5_base64($_), 0, $md5length);
+		unless (exists $done_md5{$md5}) {
 			push (@liste, $_);
 		}
 	}
@@ -93,12 +101,16 @@ while ($runs <= $number) {
 
   if (@liste) {
   	$url = splice (@liste, 0, 1);
+	$urlcorr = "http://www.zeit.de/" . $url . "/komplettansicht";
   }
   else {
 	$url = $recup;
+	# quick hack
+	$urlcorr = "http://www.zeit.de/index";
   }
 
-  $done_crc{crc32($url)}++;
+  $md5 = substr(md5_base64($url), 0, $md5length);
+  $done_md5{$md5} = ();
   print $done $url, "\n";
 
   # Change output frequency here :
@@ -113,13 +125,12 @@ while ($runs <= $number) {
 
 
   # Fetch the page (re-encoding not always necessary)
-  $urlcorr = "http://www.zeit.de/" . $url . "/komplettansicht";
-  my $req = HTTP::Request->new(GET => $urlcorr);
-  $req->header(
+  my $request = HTTP::Request->new(GET => $urlcorr);
+  $request->header(
 	'Accept' => 'text/html',
 	'Accept-Encoding' => $can_accept,
   );
-  $result = $ua->request($request);
+  my $result = $ua->request($request);
   if ($result->is_success) {
 	$seite = $result->decoded_content; #(charset => 'none')
   }
@@ -141,7 +152,8 @@ while ($runs <= $number) {
 				$link =~ m/(.+?)(\?)/o;
 				$link = $1;
 			}
-			unless ($link =~ m/#|-box-|xml|bildergalerie|bg-|Spiele|quiz|themen|index/o) {
+			unless ($link =~ m/#|-box-|xml|bildergalerie|bg-|Spiele|quiz|themen|index|video\/|administratives\//o) { #replacement for unless ( ($link =~ m/#/) || ($link =~ m/-box-/) || ($link =~ m/xml/) || ($link =~ m/bildergalerie/) || ($link =~ m/bg-/) || ($link =~ m/Spiele/) || ($link =~ m/quiz/) || ($link =~ m/themen/) || ($link =~ m/index/) ) {
+		# Alternative list : unless (($link =~ m/angebote/) || ($link =~ m/\?/) || ($link =~ m/hilfe/) || ($link =~ m/studium/) || ($link =~ m/newsletter/) || ($link =~ m/spiele/) || ($link =~ m/zuender/) || ($link =~ m/bildergalerie/) || ($link =~ m/bg-/) || ($link =~ m/quiz/) || ($link =~ m/rezept/) || ($link =~ m/siebeck/)) {
 				$link =~ s/\/komplettansicht$//og; # $ added (faster)
 				$link =~ s/\/+$//og;
 				$link =~ s/\/[0-9]+$//og; # $ added (did not work otherwise)
@@ -164,8 +176,8 @@ while ($runs <= $number) {
 		push (@buffer, $n);
 	}
 	else {
-		$crc = crc32($n);
-		unless (exists $done_crc{$crc}) {
+		$md5 = substr(md5_base64($n), 0, $md5length);
+		unless (exists $done_md5{$md5}) {
 		push (@liste, $n);
 		}
 	}
@@ -178,8 +190,8 @@ while ($runs <= $number) {
 	%seen = ();
 	@buffer = grep { ! $seen{ $_ }++ } @buffer; # remove duplicates (fast)
 	foreach $n (@buffer) {
-		$crc = crc32($n);
-		unless (exists $done_crc{$crc}) {
+		$md5 = substr(md5_base64($n), 0, $md5length);
+		unless (exists $done_md5{$md5}) {
 		push (@liste, $n);
 		}
 	}
@@ -270,7 +282,7 @@ while ($runs <= $number) {
 	}
 
   # Does not print out an empty text
-  if (scalar(@text) > 5) {
+  if (scalar(@text) > 10) {
 	foreach $n (@text) {
 		print $output "$n\n";
 	}
@@ -283,8 +295,8 @@ while ($runs <= $number) {
 	%seen = ();
 	@buffer = grep { ! $seen{ $_ }++ } @buffer; # remove duplicates (fast)
 	foreach $n (@buffer) {
-		$crc = crc32($n);
-		unless (exists $done_crc{$crc}) {
+		$md5 = substr(md5_base64($n), 0, $md5length);
+		unless (exists $done_md5{$md5}) {
 		push (@liste, $n);
 		}
 	}
@@ -298,15 +310,18 @@ while ($runs <= $number) {
   }
 
   $runs++;
+
+  # Sleep betweem two page views
+  select(undef, undef, undef, $sleep);
 }
 
 # End of processing, saving lists 
 close ($output);
 close ($done);
 
-open (my $done_crc_write, '>', $done_crc_file) or die "Cannot open list-done-crc file (no write access ?) : $!\n";
-print $done_crc_write join("\n", keys %done_crc);
-close ($done_crc_write);
+open (my $done_md5_write, '>', $done_md5_file) or die "Cannot open list-done-md5 file (no write access ?) : $!\n";
+print $done_md5_write join("\n", keys %done_md5);
+close ($done_md5_write);
 
 open (my $todo_write, '>', $links_file) or die "Cannot open list-todo file (no write access ?) : $!\n";
 if (@buffer) {

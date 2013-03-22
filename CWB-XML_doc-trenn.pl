@@ -1,11 +1,14 @@
 #!/usr/bin/perl
 
 
-###	This script is part of the zeitcrawler (http://code.google.com/p/zeitcrawler/).
+###	This script is part of the Zeitcrawler v1.2 (http://code.google.com/p/zeitcrawler/).
 ###	It is brought to you by Adrien Barbaresi.
 ###	It is freely available under the GNU GPL v3 license (http://www.gnu.org/licenses/gpl.html).
 
-###	WORK IN PROGRESS !
+## WORK IN PROGRESS ! This is not a mature script.
+## Please check what this script does before executing it
+
+# Splits the crawl archive ("ZEIT_flatfile") into multiples XML files (metadata and text), store them in a folder named "docs".
 
 
 use strict;
