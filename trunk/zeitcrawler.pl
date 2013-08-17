@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 
-###			ZEITCRAWLER v1.2		###
+###			ZEITCRAWLER v1.3		###
 ###		http://code.google.com/p/zeitcrawler/ 		###
 
 ###	This script is brought to you by Adrien Barbaresi.
@@ -14,13 +14,15 @@
 ###	http://www.zeitverlag.de/presse/rechte-und-lizenzen/freie-nutzung/
 
 
-## Use : change the number of pages crawled to fit your needs (the script supports successive executions).
+## Use : change the number of pages crawled to fit your needs (the program supports successive executions).
 ## Execute the file without arguments.
 
 
 use strict;
 use warnings;
 #use locale;
+
+use Getopt::Long;
 use LWP::UserAgent;
 use base 'HTTP::Message';
 require Compress::Zlib;
@@ -28,31 +30,64 @@ use utf8;
 use open ':encoding(utf8)';
 use Digest::MD5 qw(md5_base64);
 
+use Try::Tiny;
+
 
 ### TODO :
 # add arguments
 # add subroutines
+# "just process list" mode ?
+# something else as LWP ?
+
+
+# command-line options
+my ($help, $timeout, $number, $sleep, $all_links, $no_new_links);
+usage() if ( @ARGV < 1
+	or ! GetOptions ('help|h' => \$help, 'timeout|t=i' => \$timeout, 'number|n=i' => \$number, 'sleep|s=i' => \$sleep,  'all|a' => \$all_links, 'no-new-links' => \$no_new_links)
+	or defined $help
+	or ( (defined $all_links) && (defined $number) )
+        or ( (! defined $all_links) && (! defined $number) )
+);
+
+sub usage {
+	print "Unknown option: @_\n" if ( @_ );
+	print "Usage: perl zeitcrawler.pl [--help|-h] [--number|-n] [--timeout|-t] [--sleep|-s] [--all-links|-a] [--no-new-links]\n\n";
+	print "number: \n";
+	print "timeout: \n";
+	print "sleep: \n";
+	print "all-links: \n";
+	print "no-new-links: \n\n";
+	exit;
+}
 
 
 # Init
 my $recup = "index";
 
-# Change number of pages crawled at a time here
-my $number = 100;
+## DEFAULTS
+
+# timeout
+unless (defined $timeout) {
+    $timeout = 12;
+}
+
+# sleep
+unless (defined $sleep) {
+$sleep = 5;
+}
 
 # md5 length
-my $md5length = 8;
+my $md5length = 10;
 
-# sleep value
-my $sleep = 1;
 
 # configuring the LWP agent
 my $ua = LWP::UserAgent->new;
 my $can_accept = HTTP::Message::decodable;
-$ua->agent("ZeitCrawler/1.2");
-$ua->timeout(10);
+$ua->agent("ZeitCrawler/1.3 +https://code.google.com/p/zeitcrawler/");
+$ua->timeout($timeout);
 
 my $runs = 1;
+my $successful = 0;
 my ($url, $urlcorr, $block, $seite, $n, @text, $titel, $excerpt, $info, $autor, $datum, @reihe, $link, @links, @temp, %seen, @buffer, $q, $md5);
 
 
@@ -77,12 +112,18 @@ if (-e $links_file) {
 	my $i = 0;
 	while (<$links>) {
 		chomp;
-		$_ =~ s/\/komplettansicht.*$//;
-		$_ =~ s/\/+$//;
-		$md5 = substr(md5_base64($_), 0, $md5length);
-		unless (exists $done_md5{$md5}) {
-			push (@liste, $_);
-		}
+                my $templink = $_;
+		$templink =~ s/\/komplettansicht.*$//;
+		$templink =~ s/\/+$//;
+                try {
+		    $md5 = substr(md5_base64($templink), 0, $md5length);
+		    unless (exists $done_md5{$md5}) {
+                        push (@liste, $templink);
+		    }
+                }
+                catch {
+                    print "Problem: " . $_ . "--" .  "by URL" . $templink . "\n";
+                }
 	}
 	%seen = ();
 	@liste = grep { ! $seen{ $_ }++ } @liste; # remove duplicates (fast)
@@ -96,12 +137,23 @@ open (my $done, '>>', 'ZEIT_list_done') or die "Cannot open list-done file: $!\n
 
 # Begin of the main loop
 
+if (defined $all_links) {
+    $number = scalar(@liste);
+}
+
 print "run -- list -- buffer\n";
 while ($runs <= $number) {
 
   if (@liste) {
-  	$url = splice (@liste, 0, 1);
-	$urlcorr = "http://www.zeit.de/" . $url . "/komplettansicht";
+        $url = shift(@liste);
+        # a wide shot... but correct if the list was generated using the "make list" tool
+        # if ($url !~ m/^http:\/\/www.zeit.de\//) {
+	    $urlcorr = "http://www.zeit.de/" . $url . "/komplettansicht";
+        #}
+        # no $urlcorr if it's not the case
+        #else {
+        #    $urlcorr = $url;
+        #}
   }
   else {
 	$url = $recup;
@@ -114,12 +166,11 @@ while ($runs <= $number) {
   print $done $url, "\n";
 
   # Change output frequency here :
-  if ($runs%10 == 0) {
+  if ($runs % 10 == 0) {
 	print $runs, "\t"; print scalar (@liste), "\t"; print scalar (@buffer), "\n";
   }
 
   print $log "$runs\t"; print $log scalar (@liste), "\n";
-  print $log "$url\n";
   @text = ();
 
 
@@ -132,10 +183,14 @@ while ($runs <= $number) {
   );
   my $result = $ua->request($request);
   if ($result->is_success) {
-	$seite = $result->decoded_content; #(charset => 'none')
+      print $log "$url\tOK\n";
+      $seite = $result->decoded_content; #(charset => 'none')
   }
   else {
-	next;
+      print $log "$urlcorr\tError\n";
+      print $log $result->status_line, "\n";
+      $runs++;
+      next;
   }
 
 
@@ -213,7 +268,7 @@ while ($runs <= $number) {
 	@temp = split ("<div id=\"comments\" class=\"newcomments zeitkommentare\">", $seite);
   }
   else {
-	@temp = split ("<div id=\"informatives\">", $seite);
+	@temp = split ("<div id=\"informatives\"", $seite);
   }
 
   $seite = $temp[0];
@@ -226,8 +281,12 @@ while ($runs <= $number) {
   $titel = "Titel: " . $titel;
   push (@text, $titel);
 
-  $seite =~ m/<p class="excerpt">(.+?)<\/p>/o;
-  $excerpt = $1;
+  if ($seite =~ m/<p class="excerpt">(.+?)<\/p>/o) {
+        $excerpt = $1;
+  }
+  else {
+      $excerpt = "";
+  }
   $excerpt = "Excerpt: " . $excerpt;
   push (@text, $excerpt);
 
@@ -263,7 +322,7 @@ while ($runs <= $number) {
   $seite =~ s/.+class="article">//o;
   }
   @reihe = split ("<p>", $seite);
-  splice (@reihe,0,1);
+  splice (@reihe, 0, 1); # shift ?
 
   foreach $block (@reihe) {
 	#next if $block eq "</p>";
@@ -275,11 +334,14 @@ while ($runs <= $number) {
 	$block =~ s/^\s+//og; # moved because of execution time
 	$block =~ s/^<li.+?$//ogs;
 	$block =~ s/\s+/ /og;
-		if (($block =~ m/zeit.de\/musik/o) || ($block =~ m/zeit.de\/audio/o) || ($block =~ m/\[weiter\?\]/o) || ($block =~ m/Lesen Sie hier mehr aus dem Ressort/o)) {
+        if ( ($block =~ m/Ergänzend zur Textversion bieten wir Ihnen/o) || ($block =~ m/Die Nutzung ist ausschließlich in den Grenzen/o) ) {
 		$block = ();
-		}
-	push (@text, $block) if defined ($block);
 	}
+	if (($block =~ m/zeit.de\/musik/o) || ($block =~ m/zeit.de\/audio/o) || ($block =~ m/\[weiter\?\]/o) || ($block =~ m/Lesen Sie hier mehr aus dem Ressort/o)) {
+		$block = ();
+	}
+	push (@text, $block) if defined ($block);
+  }
 
   # Does not print out an empty text
   if (scalar(@text) > 10) {
@@ -306,12 +368,12 @@ while ($runs <= $number) {
   }
 
   if ( (scalar (@liste) == 0) && (scalar (@buffer) == 0) ) {
-  last;
+      last;
   }
 
   $runs++;
 
-  # Sleep betweem two page views
+  # Sleep between two page views
   select(undef, undef, undef, $sleep);
 }
 
