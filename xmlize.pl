@@ -1,12 +1,12 @@
 #!/usr/bin/perl
 
 
-###	This script is part of the Zeitcrawler v1.2 (http://code.google.com/p/zeitcrawler/).
-###	It is brought to you by Adrien Barbaresi.
-###	It is freely available under the GNU GPL v3 license (http://www.gnu.org/licenses/gpl.html).
+###	This script is part of the Zeitcrawler v1.3 (http://code.google.com/p/zeitcrawler/).
+###	Copyright (C) Adrien Barbaresi 2011-2013.
+###	This is free software, released under the GNU GPL v3 license (http://www.gnu.org/licenses/gpl.html).
 
-# Function : expects a file named "ZEIT_flatfile" and converts it to a (hopefully valid) XML file named "ZEIT_crawl.xml".
-# Use : without arguments
+# Function: expects a file named "ZEIT_flatfile" and converts it to a (hopefully valid) XML file named "ZEIT_crawl.xml".
+# Use: without arguments
 
 
 use strict;
