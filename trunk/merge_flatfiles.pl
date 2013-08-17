@@ -1,13 +1,13 @@
 #!/usr/bin/perl
 
 
-###	This script is part of the Zeitcrawler v1.2 (http://code.google.com/p/zeitcrawler/).
-###	It is brought to you by Adrien Barbaresi.
-###	It is freely available under the GNU GPL v3 license (http://www.gnu.org/licenses/gpl.html).
+###	This script is part of the Zeitcrawler v1.3 (http://code.google.com/p/zeitcrawler/).
+###	Copyright (C) Adrien Barbaresi 2011-2013.
+###	This is free software, released under the GNU GPL v3 license (http://www.gnu.org/licenses/gpl.html).
 
 
-# Function : duplicate detection based on title and excerpt.
-# Use : without arguments, change "input" and "output" values below.
+# Function: duplicate detection based on title and excerpt.
+# Use: without arguments, change "input" and "output" values below.
 
 
 use strict;

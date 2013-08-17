@@ -1,22 +1,22 @@
-			ZEITCRAWLER v1.2
+			ZEITCRAWLER v1.3
 		http://code.google.com/p/zeitcrawler/
 
 
 === LICENSE ===
 
-This software is brought to you by Adrien Barbaresi (adrien.barbaresi@gmail.com).
-It is freely available under the GNU GPL v3 license (http://www.gnu.org/licenses/gpl.html).
+This is free software, under the GNU GPL v3 license (http://www.gnu.org/licenses/gpl.html).
+Copyright (C) Adrien Barbaresi 2011-2013 (adrien.barbaresi@gmail.com).
 
 The texts gathered using this software are for personal (or academic) use only, you are not allowed to republish them.
 The cases which allow for a free use of the texts are listed on this page (in German) :
-http://www.zeitverlag.de/presse/rechte-und-lizenzen/freie-nutzung/
+http://www.zeit-verlagsgruppe.de/presse/rechte-und-lizenzen/freie-nutzung/
 
 
 === DESCRIPTION ===
 
 Starting from the front page or from a given list of links, the crawler retrieves newspaper articles and gathers new links to explore as it goes, stripping the text of each article out of the HTML formatting and saving it into a raw text file.
 
-Due to its specialization it is able to build a reliable corpus consisting of texts and relevant metadata (title, author, excerpt, date und url). The list of links which comes with the software features about 130.000 articles, which enables to gather more than 100 millions of tokens.
+Due to its specialization it is able to build a reliable corpus consisting of texts and relevant metadata (title, author, excerpt, date und url). The URL list which comes with the software features about 130.000 articles, which enables to gather more than 100 millions of tokens.
 
 As you can't republish anything but quotations of the texts, the purpose of this tool is to enable others to make their own version of the corpus, as crawling is not explicitly forbidden by the right-holders of Die Zeit.
 
@@ -27,19 +27,24 @@ The export in XML format accounts for the compatibility with other software desi
 
 === FILES ===
 
-There are 4 different scripts and one text file in this release related to the crawler itself :
+There are 5 different scripts and one text file in this release related to the crawler itself:
 
   ⋅ check_flatfile.pl	[check the integrity of raw text data]
   ⋅ clean_directory.sh	[compress the files and remove the original ones]
+  · fetch_xml_sitemaps	[xml sitemaps crawler, enabling to gather all possible URLs]
   ⋅ merge_flatfiles.pl	[duplicate detection based on title and excerpt]
   ⋅ zeitcrawler.pl	[the crawler itself]
   ⋅ ZEIT_list_todo	[a sample list of links that may be used as an input for the crawler]
 
-The following scripts allow for a conversion to frequent corpus formats :
+The 3 following scripts allow for a conversion to frequent corpus formats:
 
   ⋅ fragment+xmlize.pl	[make a series of XML documents out of the crawler output]
   ⋅ xmlize.pl		[make one XML document out of the crawler output]
   · CWB-XML_tag+join.sh	[together with two Perl scripts, experimental version towards an import into CWB]
+
+Finally, this toy script enables to see if a given word is in the corpus (for testing purposes):
+
+  · word_search.pl
 
 
 === USAGE ===
@@ -54,7 +59,7 @@ Having stored the files in the same directory, here is a possible scenario :
 
 === RESTRICTIONS ===
 
-The crawler was designed to get as little noise as possible. However, it is highly dependent on the content management system and on the HTML markup used by the newspaper Die Zeit. It worked by July 1st 2012, but it could break on future versions of the website. I may not update it on a regular basis.
+The crawler was designed to get as little noise as possible. However, it is highly dependent on the content management system and on the HTML markup used by the newspaper Die Zeit. It worked by July 1st 2013, but it could break on future versions of the website. I may not update it on a regular basis.
 
 The XML conversion was written with robustness in mind, but it does not provide a handy solution for all possible caveats, especially unicode (bad) character encoding issues. As the input may be a large corpus resulting from a web crawl, the scripts do not guarantee by design that the XML file will be valid.
 
@@ -63,5 +68,6 @@ All the scripts should work correctly on UNIX-like systems if you set the right 
 
 === CHANGELOG ===
 
-22nd March 2013 : v1.2 - Small efficiency improvements, script to remove duplicates added, experimental version of a conversion to CWB format added, updated list of links.
-1st August 2012 : v1.1 – Speed and memory use improvements for the crawler : replacement of the CRC function, better and reordered regular expressions, use of a hash to remove duplicates, the text is only re-encoded when written to a file, a few bugs removed.
+17th August 2013: v1.3 - Better memory management, xml sitemap crawler added.
+22nd March 2013: v1.2 - Small efficiency improvements, script to remove duplicates added, experimental version of a conversion to CWB format added, updated list of links.
+1st August 2012: v1.1 – Speed and memory use improvements for the crawler : replacement of the CRC function, better and reordered regular expressions, use of a hash to remove duplicates, the text is only re-encoded when written to a file, a few bugs removed.
