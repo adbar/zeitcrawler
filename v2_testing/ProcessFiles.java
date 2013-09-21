@@ -9,7 +9,10 @@
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.Queue;
 import javax.xml.stream.*;
 import javax.xml.transform.stream.StreamSource;
 
@@ -19,10 +22,11 @@ import javax.xml.transform.stream.StreamSource;
  */
 public class ProcessFiles {
 
-    private int fileCounter;
+    private int fileCounter, foundFiles;
     private String dirName, exportName;
-    private String tagBuffer = null;
-    private String pBuffer;
+    private Queue<File> dirQueue = new LinkedList<File>();
+    private static ArrayList<File> globalListOfFiles = new ArrayList<File>();
+    private String tagBuffer, pBuffer, lastBuffer;
     private boolean isSourceBody, isSourceHead, isParagraph, isSkip, isRelevant, isOtherTag, isBody;
     private XMLStreamReader stax;
     private XMLStreamWriter xmlWriter;
@@ -33,51 +37,98 @@ public class ProcessFiles {
      */
     public static void main(String[] args) {
         ProcessFiles pf = new ProcessFiles();
+        // sanity check
         if (args.length != 1) {
             System.out.println("Error, parameter missing:\n java ProcessFiles directory/");
         }
         else {
+            // directory traversal, looking for files
             try {
-                pf.processDir(args[0]);
+                pf.lookForFiles(args[0]);
             }
             catch (Exception e) {
-                e.printStackTrace();
-                System.err.println("Problem, parts of the program were not run.");
+                //e.printStackTrace();
+                System.err.println("Problem during directory traversal, parts of the program were not run.");
+            }
+            // file processing
+            if (globalListOfFiles != null) {
+                System.out.println("Found " + globalListOfFiles.size() + " files.");
+                for (int i = 0; i < globalListOfFiles.size(); i++) {
+                    try {
+                        pf.processFile(globalListOfFiles.get(i));
+                    }
+                    catch (Exception e) {
+                        //e.printStackTrace();
+                        System.err.println("Problem with file:" + globalListOfFiles.get(i).toString() + ", parts of the program were not run.");
+                    }
+                }
             }
         }
     }
 
     /*
-     * Read files in directory
+     * Traverse all subdirectories and populate file list
      */
-    private void processDir(String dirname) throws Exception {
-        File folder = new File(dirname);
-        File[] listOfFiles = folder.listFiles();
-        if (listOfFiles != null) {
-            printResults(listOfFiles.length);
-            // File loop
-            for (int i = 0; i < listOfFiles.length; i++) {
-                String filestring = listOfFiles[i].toString();
-                // File check + file name check (do not process the export files)
-                if ((listOfFiles[i].isFile()) && ("_export" != filestring.substring(filestring.length() - 11, filestring.length() - 4).intern())) {
-                    enumerateFiles(filestring);
-                    // Try-catch read XML
-                    try {
-                        XMLparseFile(listOfFiles[i]);
+    private void lookForFiles(String objectname) throws Exception {
+        File object = new File(objectname);
+        if (object.isDirectory()) {
+            System.out.println("Opening directory: " + object.toString());
+            File[] listOfFiles = object.listFiles();
+            if (listOfFiles != null) {
+                foundFiles = 0;
+                for (int i = 0; i < listOfFiles.length; i++) {
+                    // add to file list
+                    if (listOfFiles[i].isFile()) {
+                        // getAbsoluteFile(), getName(), getPath()
+                        System.out.println("File name: " + listOfFiles[i].toString());
+                        fileSafeAdd(listOfFiles[i]);
                     }
-                    catch (IOException e) {
-                        e.printStackTrace();
-                        throw new Exception("IO Error: file not found or cannot open file", e);
-                    }
-                    catch (XMLStreamException e) {
-                        e.printStackTrace();
-                        throw new Exception("XMLStream Error", e);
+                    // add to directory list
+                    else if (listOfFiles[i].isDirectory()) {
+                        lookForFiles(listOfFiles[i].toString());
                     }
                 }
+                System.out.println("Found " + foundFiles + " files");
             }
         }
+        // add to list
+        else if (object.isFile()) {
+            fileSafeAdd(object);
+        }
         else {
-            printResults(0);
+            throw new Exception(object.toString() + "will not be processed, it is neither a file nor a directory.");
+        }
+    }
+
+    /*
+     * File sanity check before adding to list
+     */
+    private void fileSafeAdd(File file) throws Exception {
+        String filename = file.toString();
+        if (filename.endsWith(".xml")) {
+            if ("_export" != filename.substring(filename.length() - 11, filename.length() - 4).intern()) {
+                globalListOfFiles.add(file);
+                foundFiles++;
+            }
+        }
+    }
+
+    /*
+     * Read file
+     */
+    private void processFile(File filename) throws Exception {
+        enumerateFiles(filename.toString());
+        // Try-catch read XML
+        try {
+            XMLparseFile(filename);
+        }
+        catch (IOException e) {
+            e.printStackTrace();
+            throw new Exception("IO Error: file not found or cannot open file", e);
+        }
+        catch (XMLStreamException e) {
+            e.printStackTrace();
+            throw new Exception("XMLStream Error", e);
         }
     }
 
@@ -99,7 +150,7 @@ public class ProcessFiles {
     private void enumerateFiles(String name) {
         System.out.println(++fileCounter + "\t" + name);
         exportName = name.substring(0, name.length() - 4) + "_export.xml";
-        System.out.println("Written as file: " + exportName);
+        System.out.println("writing as file: " + exportName);
     }
 
     /*
@@ -124,6 +175,7 @@ public class ProcessFiles {
         // assume it is relevant
         isRelevant = true;
 
+        // int event = stax.getEventType();
         while (stax.hasNext()) {
             processEvent(stax, xmlWriter);
             stax.next();
@@ -132,7 +184,13 @@ public class ProcessFiles {
         // End of processing
         xmlWriter.writeComment("end");
         xmlWriter.writeCharacters("\n");
-        xmlWriter.writeEndElement();
+        /* problems although the written XML is valid
+        try {
+            xmlWriter.writeEndElement();
+        }
+        catch (XMLStreamException e) {
+            System.err.println("Error: element already closed");
+        }*/
         xmlWriter.writeEndDocument();
         xmlWriter.close();
         stax.close();
@@ -151,7 +209,10 @@ public class ProcessFiles {
                 break;
             /* CHARACTERS */
             case XMLStreamConstants.CHARACTERS:
-                processCharacters();
+                // skip flag here
+                if (!isSkip) {
+                    processCharacters();
+                }
                 break;
             /* END ELEMENTS */
             case XMLStreamConstants.END_ELEMENT:
@@ -166,7 +227,8 @@ public class ProcessFiles {
     /* Find tags to skip */
     private boolean checkSkip(String tagName) {
         boolean result = false;
-        if ( ("infobox" == tagName.intern()) || ("image" == tagName.intern()) || ("indexteaser" == tagName.intern()) ) {
+        // tags to skip
+        if ( ("infobox" == tagName.intern()) || ("image" == tagName.intern()) || ("teaser" == tagName.intern()) || ("indexteaser" == tagName.intern()) ) {
             result = true;
         }
         return result;
@@ -207,6 +269,11 @@ public class ProcessFiles {
     private void processStartElem(String localName) throws XMLStreamException {
 
         /* If skip flag is off */
+        if (checkSkip(localName)) {
+            isSkip = true;
+            skippingComment(localName);
+        }
+
         if (!isSkip) {
 
             /* Head and body detection */
@@ -220,23 +287,15 @@ public class ProcessFiles {
                 isSourceBody = true;
             }
             else if (localName.equals("division")) {
-                // Mark end of metadata
+                // Mark end of metadata (head)
+                // System.out.println("division, body: " + isBody);
                 if (!isBody) {
-                xmlWriter.writeEndElement();
-                xmlWriter.writeCharacters("\n");
-                xmlWriter.writeStartElement("body");
-                xmlWriter.writeCharacters("\n");
-                isBody = true;
+                    xmlWriter.writeEndElement();
+                    xmlWriter.writeCharacters("\n");
+                    xmlWriter.writeStartElement("body");
+                    xmlWriter.writeCharacters("\n");
+                    isBody = true;
                 }
-            }
-            else if (localName.equals("teaser")) {
-                isSourceBody = false; // something else ?
-                xmlWriter.writeEndElement();
-                xmlWriter.writeCharacters("\n");
-            }
-            else if (checkSkip(localName)) {
-                isSkip = true;
-                skippingComment(localName);
             }
 
             /* Detect galleries */
@@ -427,40 +486,51 @@ public class ProcessFiles {
     
     /* Process end tag */
     private void processEndTag(String localName) throws XMLStreamException {
-        // end body
-        if (localName.equals("body")) {
-            isSourceBody = false;
-            isBody = false;
-            xmlWriter.writeComment("end body");
-            xmlWriter.writeCharacters("\n");
+        // check if skip
+        if (isSkip) {
+            // end of skip tag
+            if (checkSkip(localName)) {
+                isSkip = false;
+            }
         }
-        // end of skip tag
-        else if (checkSkip(localName)) {
-            isSkip = false;
-        }
-        // end of paragraph
-        else if (localName.equals("p")) {
-            trimWrite(pBuffer);
-            xmlWriter.writeCharacters("\n");
-            xmlWriter.writeEndElement();
-            xmlWriter.writeCharacters("\n");
-            isParagraph = false;
-        }
-
-        // end of other
-        if (isOtherTag) {
-            if ( (localName.equals("raw")) || (localName.equals("intertitle")) ) {
+        else {
+            // end body
+            if (localName.equals("body")) {
+                isSourceBody = false;
+                isBody = false;
+                xmlWriter.writeComment("end body");
                 xmlWriter.writeCharacters("\n");
                 xmlWriter.writeEndElement();
                 xmlWriter.writeCharacters("\n");
-                isOtherTag = false;
+            }
+            // end of paragraph
+            else if (localName.equals("p")) {
+                trimWrite(pBuffer);
+                xmlWriter.writeCharacters("\n");
+                try {
+                    xmlWriter.writeEndElement();
+                }
+                catch (XMLStreamException e) {
+                    System.err.println("Error, element already closed: " + lastBuffer);
+                }
+                xmlWriter.writeCharacters("\n");
+                isParagraph = false;
+            }
+            // end of other
+            else if (isOtherTag) {
+                if ( (localName.equals("raw")) || (localName.equals("intertitle")) ) {
+                    xmlWriter.writeCharacters("\n");
+                    xmlWriter.writeEndElement();
+                    xmlWriter.writeCharacters("\n");
+                    isOtherTag = false;
+                }
             }
         }
     }
 
     /* Trim, write and empty paragraph buffer */
     private void trimWrite(String buffer) throws XMLStreamException {
-        if ( (buffer != "") && (buffer != null)) {
+        if ( (buffer != "") && (buffer != null) ) {
             //try {
             // trim string
             buffer = buffer.replace("\n", " ");
@@ -468,6 +538,7 @@ public class ProcessFiles {
             buffer = buffer.trim();
             // print string and end of element
             xmlWriter.writeCharacters(buffer);
+            lastBuffer = buffer;
             pBuffer = "";
             //}
             /*catch (NullPointerException e) {
