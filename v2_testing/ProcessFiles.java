@@ -9,10 +9,11 @@
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.Queue;
+import java.util.HashSet;
+import java.util.Set;
 import javax.xml.stream.*;
 import javax.xml.transform.stream.StreamSource;
 
@@ -24,13 +25,34 @@ public class ProcessFiles {
 
     private int fileCounter, foundFiles;
     private String dirName, exportName;
-    private Queue<File> dirQueue = new LinkedList<File>();
     private static ArrayList<File> globalListOfFiles = new ArrayList<File>();
     private String tagBuffer, pBuffer, lastBuffer;
-    private boolean isSourceBody, isSourceHead, isParagraph, isSkip, isRelevant, isOtherTag, isBody;
+    private boolean verboseFlag;
+    private boolean isSourceBody, isSourceHead, isParagraph, isSkip, isRelevant, isOtherTag, isBody, isTable, isRoot;
     private XMLStreamReader stax;
     private XMLStreamWriter xmlWriter;
-    private HashMap<String, String> attributesMap = new HashMap<String, String>();
+    private HashMap<String, String> attributesMap = new HashMap<String, String>(16);
+
+    /* attribute values to write */
+    private static Set<String> attributeValues = new HashSet<String>(Arrays.asList(
+        new String[] {"author","copyrights","date-last-modified","ressort","sub_ressort","type","uuid","volume","year"}
+    ));
+    /* tags to skip at all times (containing other tags) */
+    private static Set<String> tagsToSkip = new HashSet<String>(Arrays.asList(
+        new String[] {"audio-link","entry","gallery","image","image-credits","indexteaser","infobox","teaser","timeline"}
+    ));
+    /* tags to buffer within paragraphs */
+    private static Set<String> bufferedWithinP = new HashSet<String>(Arrays.asList(
+        new String[] {"b","em","i","span","strong","sub","tr","u"}
+    ));
+    /* tags to skip within paragraphs */
+    private static Set<String> tagsToSkipWithinP = new HashSet<String>(Arrays.asList(
+        new String[] {"br","font","link","meta","p","span","style","supertitle"}
+    ));
+    /* rest of the tags known outside paragraphs (for error checking) */
+    private static Set<String> knownTagsRest = new HashSet<String>(Arrays.asList(
+        new String[] {"a","b","block","body","br","bu","byline","caption","column","container","copyright","description","div","division","em","iframe","image-credits","link","portraitbox","relateds","strong","tbody","td","text","th","thead","thumbnail","tr","ul","video"}
+    ));
 
     /*
      * Main: test arguments
@@ -38,10 +60,14 @@ public class ProcessFiles {
     public static void main(String[] args) {
         ProcessFiles pf = new ProcessFiles();
         // sanity check
-        if (args.length != 1) {
-            System.out.println("Error, parameter missing:\n java ProcessFiles directory/");
+        if ( (args.length < 1) && (args.length > 2) ) {
+            System.err.println("Error, parameter missing and/or too many args:\n java ProcessFiles directory/");
         }
         else {
+            // set verbose boolean
+            if ( (args.length == 2) && (args[1].equals("-v")) ) {
+                pf.verboseFlag = true;
+            }
             // directory traversal, looking for files
             try {
                 pf.lookForFiles(args[0]);
@@ -80,7 +106,6 @@ public class ProcessFiles {
                     // add to file list
                     if (listOfFiles[i].isFile()) {
                         // getAbsoluteFile(), getName(), getPath()
-                        System.out.println("File name: " + listOfFiles[i].toString());
                         fileSafeAdd(listOfFiles[i]);
                     }
                     // add to directory list
@@ -88,7 +113,7 @@ public class ProcessFiles {
                         lookForFiles(listOfFiles[i].toString());
                     }
                 }
-                System.out.println("Found " + foundFiles + " files");
+                System.out.println("Found " + foundFiles + " files in directory " + objectname);
             }
         }
         // add to list
@@ -109,6 +134,9 @@ public class ProcessFiles {
             if ("_export" != filename.substring(filename.length() - 11, filename.length() - 4).intern()) {
                 globalListOfFiles.add(file);
                 foundFiles++;
+                if (verboseFlag) {
+                    System.out.println("File name: " + filename);
+                }
             }
         }
     }
@@ -133,24 +161,14 @@ public class ProcessFiles {
     }
 
     /*
-     * Print total number of files, otherwise print error message
-     */
-    private void printResults(int number) {
-        if (number == 0) {
-            System.out.println("The directory " + dirName + " does not exist or it is empty.");
-        }
-        else {
-            System.out.println("Number of files in directory: " + number);
-        }
-    }
-
-    /*
      * Enumerate the files, process export name
      */
     private void enumerateFiles(String name) {
         System.out.println(++fileCounter + "\t" + name);
         exportName = name.substring(0, name.length() - 4) + "_export.xml";
-        System.out.println("writing as file: " + exportName);
+        if (verboseFlag) {
+            System.out.println("writing as file: " + exportName);
+        }
     }
 
     /*
@@ -164,16 +182,26 @@ public class ProcessFiles {
 
         // create XMLStreamWriter output
         XMLOutputFactory xmlof = XMLOutputFactory.newInstance();
-        xmlWriter = xmlof.createXMLStreamWriter(
-                new FileOutputStream(exportName), "UTF-8");
+        xmlWriter = xmlof.createXMLStreamWriter(new FileOutputStream(exportName), "UTF-8");
 
         // start
         xmlWriter.writeStartDocument("utf-8", "1.0");
         xmlWriter.writeCharacters("\n");
         xmlWriter.writeStartElement("root");
         xmlWriter.writeCharacters("\n");
+
+        // find and write original URL
+        String filename = fh.getName();
+        String originalURL = "http://www.zeit.de/" + filename.replace("_", "/").substring(0, filename.lastIndexOf("."));
+        xmlWriter.writeStartElement("source");
+        xmlWriter.writeCharacters(originalURL);
+        xmlWriter.writeEndElement();
+        xmlWriter.writeCharacters("\n");
+
         // assume it is relevant
         isRelevant = true;
+        // boolean for root element (avoid gallery skippping when it is root)
+        isRoot = true;
 
         // int event = stax.getEventType();
         while (stax.hasNext()) {
@@ -194,10 +222,12 @@ public class ProcessFiles {
         xmlWriter.writeEndDocument();
         xmlWriter.close();
         stax.close();
-        if (! isRelevant) {
-            System.out.println("Not relevant: gallery detected.");
+        if (verboseFlag) {
+            if (! isRelevant) {
+                System.out.println("Not relevant: gallery detected.");
+            }
+            System.out.println("End of file processing.");
         }
-        System.out.println("End of file processing.");
     }
 
     /* Send event to subfunctions */
@@ -225,11 +255,38 @@ public class ProcessFiles {
     }
 
     /* Find tags to skip */
-    private boolean checkSkip(String tagName) {
+    private boolean checkSkip(String tagName, boolean startSequence) throws XMLStreamException {
         boolean result = false;
         // tags to skip
-        if ( ("infobox" == tagName.intern()) || ("image" == tagName.intern()) || ("teaser" == tagName.intern()) || ("indexteaser" == tagName.intern()) ) {
-            result = true;
+        if (tagsToSkip.contains(tagName)) {
+            if ( (! isSourceHead) && (! isSourceBody) ) { // if (isRoot) {
+                result = false;
+                isRoot = false;
+            }
+            else {
+                result = true;
+                // print skipping comment once
+                if (startSequence) {
+                    skippingComment(tagName);
+                }
+            }
+        }
+        // p leading to audio player
+        else if ("p" == tagName.intern()) {
+            // beginning of sequence
+            if (startSequence) {
+                int attributeCount = stax.getAttributeCount();
+                if (attributeCount == 1) {
+                    if ( (stax.getAttributeLocalName(0).equals("id")) && (stax.getAttributeValue(0).equals("audio_player")) ) {
+                        result = true;
+                        skippingComment("p id=\"audio_player\"");
+                    }
+                }
+            }
+            // end of sequence
+            else {
+                result = true;
+            }
         }
         return result;
     }
@@ -237,7 +294,9 @@ public class ProcessFiles {
     /* Print the selected events to STDOUT */
     private void printEvent(String tagName, String buffer) throws XMLStreamException {
         // Print to STDOUT
-        System.out.println(tagName + ": " + buffer);
+        if (verboseFlag) {
+            System.out.println(tagName + ": " + buffer);
+        }
     }
 
     /* Write the selected events to XML */
@@ -269,9 +328,10 @@ public class ProcessFiles {
     private void processStartElem(String localName) throws XMLStreamException {
 
         /* If skip flag is off */
-        if (checkSkip(localName)) {
+        // tag name + boolean = start tag
+        if (checkSkip(localName, true)) {
+            // return ?
             isSkip = true;
-            skippingComment(localName);
         }
 
         if (!isSkip) {
@@ -286,9 +346,8 @@ public class ProcessFiles {
                 isSourceHead = false;
                 isSourceBody = true;
             }
-            else if (localName.equals("division")) {
+            else if ( (localName.equals("container")) || (localName.equals("division")) ) {
                 // Mark end of metadata (head)
-                // System.out.println("division, body: " + isBody);
                 if (!isBody) {
                     xmlWriter.writeEndElement();
                     xmlWriter.writeCharacters("\n");
@@ -327,41 +386,16 @@ public class ProcessFiles {
                     int attributeCount = stax.getAttributeCount();
                     for (int i = 0; i < attributeCount; i++) {
                         if (stax.getAttributeLocalName(i).equals("name")) {
-                            // Author
-                            if (stax.getAttributeValue(i).equals("author")) {
-                                tagBuffer = "author";
-                            }
-                            // Copyright
-                            else if (stax.getAttributeValue(i).equals("copyrights")) {
-                                tagBuffer = "copyrights";
-                            }
-                            // Date
-                            else if (stax.getAttributeValue(i).equals("date-last-modified")) {
-                                tagBuffer = "date";
-                            }
-                            // Ressort
-                            else if (stax.getAttributeValue(i).equals("ressort")) {
-                                tagBuffer = "ressort";
-                            }
-                            // Sub-ressort
-                            else if (stax.getAttributeValue(i).equals("sub_ressort")) {
-                                tagBuffer = "sub_ressort";
-                            }
-                            // Type
-                            else if (stax.getAttributeValue(i).equals("type")) {
-                                tagBuffer = "type";
-                            }
-                            // UUID
-                            else if (stax.getAttributeValue(i).equals("uuid")) {
-                                tagBuffer = "uuid";
-                            }
-                            // Volume
-                            else if (stax.getAttributeValue(i).equals("volume")) {
-                                tagBuffer = "volume";
-                            }
-                            // Year
-                            else if (stax.getAttributeValue(i).equals("year")) {
-                                tagBuffer = "year";
+                            String attributeValue = stax.getAttributeValue(i);
+                            if (attributeValues.contains(attributeValue)) {
+                                // shorten tag name
+                                if ("date-last-modified" == attributeValue.intern()) {
+                                    tagBuffer = "date";
+                                }
+                                // other cases
+                                else {
+                                    tagBuffer = attributeValue;
+                                }
                             }
                         }
                     }
@@ -386,8 +420,10 @@ public class ProcessFiles {
             if (isSourceBody) {
 
                 /* Paragraphs */
+                // order by tag length ?
                 if (isParagraph) {
-                    if ( (localName.equals("strong")) || (localName.equals("em")) ) { // || (localName.equals("intertitle"))
+                    // stays in output
+                    if (bufferedWithinP.contains(localName)) {
                         tagBuffer = localName;
                     }
                     else if (localName.equals("a")) {
@@ -399,9 +435,6 @@ public class ProcessFiles {
                         }
                         tagBuffer = "a";
                     }
-                    else if (localName.equals("br")) {
-                        skippingComment("br");
-                    }
                     else if (localName.equals("entity")) {
                         int attributeCount = stax.getAttributeCount();
                         for (int i = 0; i < attributeCount; i++) {
@@ -411,35 +444,71 @@ public class ProcessFiles {
                         }
                         tagBuffer = "entity";
                     }
+                    // skipped
+                    else if (tagsToSkipWithinP.contains(localName)) {
+                        skippingComment(localName);
+                    }
+                    // print out unknown
                     else {
-                        String errorMsg = "unknown tag: " + localName;
-                        xmlWriter.writeComment(errorMsg);
-                        xmlWriter.writeCharacters("\n");
-                        System.out.println(errorMsg);
+                        if (verboseFlag) {
+                            String errorMsg = "unknown tag in p: " + localName;
+                            xmlWriter.writeComment(errorMsg);
+                            xmlWriter.writeCharacters("\n");
+                            System.err.println(errorMsg + "\tfile: " + exportName);
+                        }
                     }
                 }
                 /* Titles */
                 else if ( (localName.equals("supertitle")) || (localName.equals("title")) || (localName.equals("subtitle")) ) {
                     tagBuffer = localName;
                 }
-
-                /* Paragraphs */
+                /* Paragraphs (beginning) */
                 else if (localName.equals("p")) {
                     xmlWriter.writeStartElement("p");
                     xmlWriter.writeCharacters("\n");
                     isParagraph = true;
                 }
-
+                /* Tables */
+                else if (localName.equals("table")) {
+                    isTable = true;
+                    xmlWriter.writeComment("skipping table formatting");
+                    xmlWriter.writeCharacters("\n");
+                }
                 /* Other */
-                else if ( (localName.equals("raw")) || (localName.equals("intertitle")) ) {
-                    xmlWriter.writeStartElement(localName);
+                else if ( (localName.equals("raw")) || (localName.equals("intertitle")) || (localName.equals("li")) || (localName.equals("blocker")) ) {
+                    // Turn lists into paragraphs
+                    if ( (localName.equals("li")) || (localName.equals("blocker")) ) {
+                        xmlWriter.writeStartElement("p");
+                    }
+                    else {
+                        xmlWriter.writeStartElement(localName);
+                    }
                     xmlWriter.writeCharacters("\n");
                     isOtherTag = true;
                 }
-
+                /* Citations */
+                else if (localName.equals("citation")) {
+                    int attributeCount = stax.getAttributeCount();
+                    for (int i = 0; i < attributeCount; i++) {
+                        if ("layout" != stax.getAttributeLocalName(i).intern()) {
+                            attributesMap.put(stax.getAttributeLocalName(i), stax.getAttributeValue(i));
+                        }
+                    }
+                    tagBuffer = "citation";
+                }
+                /* the rest (error handling) */
+                else {
+                    if (verboseFlag) {
+                        if (! knownTagsRest.contains(localName) ) {
+                            String errorMsg = "unknown tag: " + localName;
+                            xmlWriter.writeComment(errorMsg);
+                            xmlWriter.writeCharacters("\n");
+                            System.err.println(errorMsg  + "\tfile: " + exportName);
+                        }
+                    }
+                }
             }
         }
-
     }
     
     /* Process characters */
@@ -453,13 +522,22 @@ public class ProcessFiles {
             }
             else {
                 if (isParagraph) {
-                    pBuffer = pBuffer + stax.getText();
+                    if (pBuffer != null) {
+                        pBuffer = pBuffer + stax.getText();
+                    }
+                    else {
+                        pBuffer = stax.getText();
+                    }
                 }
                 // this tag may contain other tags
                 else {
-                    xmlWriter.writeCharacters(stax.getText());
+                    trimWrite(stax.getText());
                 }
             }
+        }
+        else if (isTable) {
+            xmlWriter.writeCharacters(stax.getText());
+            xmlWriter.writeCharacters("\n");
         }
 
         // generic processing: everything that's left
@@ -489,7 +567,8 @@ public class ProcessFiles {
         // check if skip
         if (isSkip) {
             // end of skip tag
-            if (checkSkip(localName)) {
+            // tag name + boolean = end tag
+            if (checkSkip(localName, false)) {
                 isSkip = false;
             }
         }
@@ -518,11 +597,19 @@ public class ProcessFiles {
             }
             // end of other
             else if (isOtherTag) {
-                if ( (localName.equals("raw")) || (localName.equals("intertitle")) ) {
+                if ( (localName.equals("raw")) || (localName.equals("intertitle")) || (localName.equals("li")) || (localName.equals("blocker")) ) {
                     xmlWriter.writeCharacters("\n");
                     xmlWriter.writeEndElement();
                     xmlWriter.writeCharacters("\n");
                     isOtherTag = false;
+                }
+            }
+            // end of table
+            else if (isTable) {
+                if (localName.equals("table")) {
+                    //xmlWriter.writeEndElement();
+                    //xmlWriter.writeCharacters("\n");
+                    isTable = false;
                 }
             }
         }
@@ -535,11 +622,11 @@ public class ProcessFiles {
             // trim string
             buffer = buffer.replace("\n", " ");
             buffer = buffer.replaceAll(" +", " ");
-            buffer = buffer.trim();
+            // buffer = buffer.trim();
             // print string and end of element
             xmlWriter.writeCharacters(buffer);
             lastBuffer = buffer;
-            pBuffer = "";
+            pBuffer = null;
             //}
             /*catch (NullPointerException e) {
                 System.err.println("error:" + buffer);
