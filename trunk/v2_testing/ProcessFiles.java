@@ -28,7 +28,7 @@ public class ProcessFiles {
     private static ArrayList<File> globalListOfFiles = new ArrayList<File>();
     private String tagBuffer, pBuffer, lastBuffer;
     private boolean verboseFlag;
-    private boolean isSourceBody, isSourceHead, isParagraph, isSkip, isRelevant, isOtherTag, isBody, isTable, isRoot;
+    private boolean isSourceBody, isSourceHead, isParagraph, isSkip, isRelevant, isOtherTag, isBody, isTable, isRoot, isDoubleP;
     private XMLStreamReader stax;
     private XMLStreamWriter xmlWriter;
     private HashMap<String, String> attributesMap = new HashMap<String, String>(16);
@@ -39,7 +39,7 @@ public class ProcessFiles {
     ));
     /* tags to skip at all times (containing other tags) */
     private static Set<String> tagsToSkip = new HashSet<String>(Arrays.asList(
-        new String[] {"audio-link","entry","gallery","image","image-credits","indexteaser","infobox","teaser","timeline"}
+        new String[] {"audio-link","entry","gallery","image","image-credits","indexteaser","infobox","object","teaser","timeline"}
     ));
     /* tags to buffer within paragraphs */
     private static Set<String> bufferedWithinP = new HashSet<String>(Arrays.asList(
@@ -47,7 +47,7 @@ public class ProcessFiles {
     ));
     /* tags to skip within paragraphs */
     private static Set<String> tagsToSkipWithinP = new HashSet<String>(Arrays.asList(
-        new String[] {"br","font","link","meta","p","span","style","supertitle"}
+        new String[] {"br","font","link","meta","img","image","p","raw","span","style","supertitle"}
     ));
     /* rest of the tags known outside paragraphs (for error checking) */
     private static Set<String> knownTagsRest = new HashSet<String>(Arrays.asList(
@@ -447,6 +447,9 @@ public class ProcessFiles {
                     // skipped
                     else if (tagsToSkipWithinP.contains(localName)) {
                         skippingComment(localName);
+                        if (localName.equals("p")) {
+                            isDoubleP = true;
+                        }
                     }
                     // print out unknown
                     else {
@@ -571,6 +574,16 @@ public class ProcessFiles {
             if (checkSkip(localName, false)) {
                 isSkip = false;
             }
+            /*if (!isParagraph) {
+                if (checkSkip(localName, false)) {
+                    isSkip = false;
+                }
+            }
+            else {
+                if (tagsToSkipWithinP.contains(localName)) {
+                    isSkip = false;
+                }
+            }*/
         }
         else {
             // end body
@@ -585,15 +598,21 @@ public class ProcessFiles {
             // end of paragraph
             else if (localName.equals("p")) {
                 trimWrite(pBuffer);
-                xmlWriter.writeCharacters("\n");
-                try {
-                    xmlWriter.writeEndElement();
+                // avoid double depth paragraphs
+                if (isDoubleP) {
+                    isDoubleP = false;
                 }
-                catch (XMLStreamException e) {
-                    System.err.println("Error, element already closed: " + lastBuffer);
+                else {
+                    xmlWriter.writeCharacters("\n");
+                    try {
+                        xmlWriter.writeEndElement();
+                    }
+                    catch (XMLStreamException e) {
+                        System.err.println("Error, element already closed: " + lastBuffer);
+                    }
+                    xmlWriter.writeCharacters("\n");
+                    isParagraph = false;
                 }
-                xmlWriter.writeCharacters("\n");
-                isParagraph = false;
             }
             // end of other
             else if (isOtherTag) {
