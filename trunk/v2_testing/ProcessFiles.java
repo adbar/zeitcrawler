@@ -9,6 +9,7 @@
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.FileNotFoundException;
 import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -16,6 +17,8 @@ import java.util.HashSet;
 import java.util.Set;
 import javax.xml.stream.*;
 import javax.xml.transform.stream.StreamSource;
+import java.text.Normalizer;
+import java.net.URLEncoder;
 
 
 /**
@@ -134,13 +137,33 @@ public class ProcessFiles {
         String filename = file.toString();
         if (filename.endsWith(".xml")) {
             if ("_export" != filename.substring(filename.length() - 11, filename.length() - 4).intern()) {
-                globalListOfFiles.add(file);
+                // important (NFD normalization below)
+                System.out.println(URLEncoder.encode(filename, "UTF-8"));
+                filename = normalizeUnicode(filename);
+                System.out.println(URLEncoder.encode(filename, "UTF-8"));
+                File fileNormalized = new File(filename);
+                System.out.println(URLEncoder.encode(fileNormalized.getName(), "UTF-8"));
+                globalListOfFiles.add(fileNormalized);
                 foundFiles++;
                 if (verboseFlag) {
                     System.out.println("File name: " + filename);
                 }
             }
         }
+    }
+
+    /*
+     * Noisy bug: Normalize to "Normalization Form Canonical Decomposition" (NFD)
+     * http://stackoverflow.com/questions/3610013/file-listfiles-mangles-unicode-names-with-jdk-6-unicode-normalization-issues
+     */
+
+    protected String normalizeUnicode(String str) {
+        // NFC or NFD, both not working
+        Normalizer.Form form = Normalizer.Form.NFD;
+        if (! Normalizer.isNormalized(str, form)) {
+            return Normalizer.normalize(str, form);
+        }
+        return str;
     }
 
     /*
@@ -152,14 +175,22 @@ public class ProcessFiles {
         try {
             XMLparseFile(filename);
         }
+        
         catch (IOException e) {
             e.printStackTrace();
             throw new Exception("IO Error: file not found or cannot open file", e);
         }
+        
         catch (XMLStreamException e) {
             e.printStackTrace();
             throw new Exception("XMLStream Error", e);
         }
+        /*
+        catch (FileNotFoundException e) {
+            e.printStackTrace();
+            throw new Exception("File not found", e);
+        }
+        */
     }
 
     /*
@@ -178,6 +209,7 @@ public class ProcessFiles {
      */
     private void XMLparseFile(File fh) throws IOException, XMLStreamException {
 
+        System.out.println(URLEncoder.encode(fh.toString(), "UTF-8"));
         // create StreamReader
         XMLInputFactory inputFactory = XMLInputFactory.newInstance();
         stax = inputFactory.createXMLStreamReader(new StreamSource(fh));
@@ -207,7 +239,7 @@ public class ProcessFiles {
         if ("news" == filename.substring(0,4).intern()) {
             articleType = "DPA";
         }
-        else if (filename.substring(0,7).matches("\\d{4}_\\d{2}")) {
+        else if (filename.substring(0,9).matches("\\d{4}%_%\\d{2}")) {
             articleType = "print";
         }
         else {
@@ -215,7 +247,7 @@ public class ProcessFiles {
         }
 
         // assume it is relevant
-        isGallery = true;
+        isGallery = false;
         // boolean for root element (avoid gallery skippping when it is root)
         isRoot = true;
         // reset date boolean
@@ -232,7 +264,7 @@ public class ProcessFiles {
         xmlWriter.writeCharacters("\n");
 
         // Gallery detected
-        if (! isGallery) {
+        if (isGallery) {
             if (verboseFlag) {
                 System.out.println("Not relevant: gallery detected.");
             }
@@ -391,7 +423,7 @@ public class ProcessFiles {
                 if (localName.equals("gallery")) {
                   xmlWriter.writeComment("gallery detected");
                   xmlWriter.writeCharacters("\n");
-                  isGallery = false;
+                  isGallery = true;
                 }
             }
 
@@ -559,7 +591,7 @@ public class ProcessFiles {
                 trimWrite(pBuffer);
                 // avoid empty tags
                 if (stax.getText() != null) {
-                    System.out.println(tagBuffer);
+                    // System.out.println(tagBuffer);
                     writeEvent(tagBuffer, stax.getText(), false);
                 }
                 tagBuffer = null;
