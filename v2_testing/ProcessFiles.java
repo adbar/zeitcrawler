@@ -1,5 +1,5 @@
 /*	This is part of the Zeitcrawler (http://code.google.com/p/zeitcrawler/).
-	Copyright (C) Adrien Barbaresi 2013.
+	Copyright (C) Adrien Barbaresi 2013-2014.
 	This is free software, released under the GNU GPL v3 license (http://www.gnu.org/licenses/gpl.html).
 
 	WORK IN PROGRESS ! This is an experimental software component.
@@ -18,7 +18,8 @@ import java.util.Set;
 import javax.xml.stream.*;
 import javax.xml.transform.stream.StreamSource;
 import java.text.Normalizer;
-import java.net.URLEncoder;
+import java.net.URI;
+import java.net.URISyntaxException;
 
 
 /**
@@ -33,7 +34,7 @@ public class ProcessFiles {
     private boolean verboseFlag;
     private boolean isSourceBody, isSourceHead, isParagraph, isSkip, isGallery, isOtherTag, isBody, isTable, isRoot, isDoubleP;
     private boolean dateFound;
-    private String articleType;
+    private String articleType, skipTag;
     private XMLStreamReader stax;
     private XMLStreamWriter xmlWriter;
     private HashMap<String, String> attributesMap = new HashMap<String, String>(16);
@@ -65,7 +66,7 @@ public class ProcessFiles {
     public static void main(String[] args) {
         ProcessFiles pf = new ProcessFiles();
         // sanity check
-        if ( (args.length < 1) && (args.length > 2) ) {
+        if ( (args.length < 1) || (args.length > 2) ) {
             System.err.println("Error, parameter missing and/or too many args:\n java ProcessFiles directory/");
         }
         else {
@@ -137,13 +138,7 @@ public class ProcessFiles {
         String filename = file.toString();
         if (filename.endsWith(".xml")) {
             if ("_export" != filename.substring(filename.length() - 11, filename.length() - 4).intern()) {
-                // important (NFD normalization below)
-                System.out.println(URLEncoder.encode(filename, "UTF-8"));
-                filename = normalizeUnicode(filename);
-                System.out.println(URLEncoder.encode(filename, "UTF-8"));
-                File fileNormalized = new File(filename);
-                System.out.println(URLEncoder.encode(fileNormalized.getName(), "UTF-8"));
-                globalListOfFiles.add(fileNormalized);
+                globalListOfFiles.add(file);
                 foundFiles++;
                 if (verboseFlag) {
                     System.out.println("File name: " + filename);
@@ -152,19 +147,6 @@ public class ProcessFiles {
         }
     }
 
-    /*
-     * Noisy bug: Normalize to "Normalization Form Canonical Decomposition" (NFD)
-     * http://stackoverflow.com/questions/3610013/file-listfiles-mangles-unicode-names-with-jdk-6-unicode-normalization-issues
-     */
-
-    protected String normalizeUnicode(String str) {
-        // NFC or NFD, both not working
-        Normalizer.Form form = Normalizer.Form.NFD;
-        if (! Normalizer.isNormalized(str, form)) {
-            return Normalizer.normalize(str, form);
-        }
-        return str;
-    }
 
     /*
      * Read file
@@ -207,9 +189,8 @@ public class ProcessFiles {
     /*
      * Scan the XML Files and print out an event
      */
-    private void XMLparseFile(File fh) throws IOException, XMLStreamException {
+    private void XMLparseFile(File fh) throws IOException, XMLStreamException, URISyntaxException {
 
-        System.out.println(URLEncoder.encode(fh.toString(), "UTF-8"));
         // create StreamReader
         XMLInputFactory inputFactory = XMLInputFactory.newInstance();
         stax = inputFactory.createXMLStreamReader(new StreamSource(fh));
@@ -229,6 +210,16 @@ public class ProcessFiles {
  
         //if ("xml.xml" != filename.substring(filename.length() - 7, filename.length()).intern()) {
         String slug = filename.substring(0, filename.lastIndexOf("."));
+
+        // Unicode filenames
+        if (slug.matches(".*%[A-Z0-9].*")) {
+            try {
+                slug = new URI(slug).getPath();
+            }
+            catch (URISyntaxException e) {
+                System.err.println("caught URISyntaxException: " + slug);
+            }
+        }
         String originalURL = "http://www.zeit.de/" + slug.replace("%_%", "/");
         xmlWriter.writeStartElement("source");
         xmlWriter.writeCharacters(originalURL);
@@ -237,7 +228,7 @@ public class ProcessFiles {
 
         // Get and print article type
         if ("news" == filename.substring(0,4).intern()) {
-            articleType = "DPA";
+            articleType = "news";
         }
         else if (filename.substring(0,9).matches("\\d{4}%_%\\d{2}")) {
             articleType = "print";
@@ -388,13 +379,22 @@ public class ProcessFiles {
     private void processStartElem(String localName) throws XMLStreamException {
 
         /* If skip flag is off */
-        // tag name + boolean = start tag
-        if (checkSkip(localName, true)) {
-            // return ?
-            isSkip = true;
+        if (!isSkip) {
+            // tag name + boolean = start tag
+            if (checkSkip(localName, true)) {
+                // return ?
+                isSkip = true;
+                skipTag = localName;
+            }
         }
 
         if (!isSkip) {
+            // tag name + boolean = start tag
+            if (checkSkip(localName, true)) {
+                // return ?
+                isSkip = true;
+                skipTag = localName;
+            }
 
             /* Head and body detection */
             if (localName.equals("head")) {
@@ -416,6 +416,16 @@ public class ProcessFiles {
                     isBody = true;
                 }
             }
+            // Correction: if there is no container or division element, but directly paragraphs
+            else if (localName.equals("p")) {
+                if ( (! isBody) && (isSourceBody)) {
+                    xmlWriter.writeEndElement();
+                    xmlWriter.writeCharacters("\n");
+                    xmlWriter.writeStartElement("body");
+                    xmlWriter.writeCharacters("\n");
+                    isBody = true;
+                }
+            }
 
             /* Detect galleries */
             if ( (! isSourceHead) && (! isSourceBody) ) {
@@ -426,6 +436,8 @@ public class ProcessFiles {
                   isGallery = true;
                 }
             }
+
+
 
             /* Head */
             if (isSourceHead) {
@@ -646,8 +658,10 @@ public class ProcessFiles {
         if (isSkip) {
             // end of skip tag
             // tag name + boolean = end tag
-            if (checkSkip(localName, false)) {
+            if ( (checkSkip(localName, false)) && (skipTag.intern() == localName.intern())) {
+                System.out.println("skip tag: " + skipTag);
                 isSkip = false;
+                System.out.println("closing tag: " + localName);
             }
             /*if (!isParagraph) {
                 if (checkSkip(localName, false)) {
