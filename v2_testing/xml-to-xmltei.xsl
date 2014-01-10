@@ -5,25 +5,19 @@
 	WORK IN PROGRESS ! This is an experimental software component.
 -->
 
-<?xml version="1.0" encoding="utf-8"?>
-<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns="http://www.tei-c.org/ns/1.0" encoding="utf-8" version="1.0">
-<xsl:output method="xml" encoding="utf-8" indent="yes"/>
+<?xml version="1.0" encoding="UTF-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns="http://www.tei-c.org/ns/1.0" version="1.0">
+<xsl:output method="xml" encoding="UTF-8" indent="yes"/>
 
-<!--<xsl:strip-space elements="*"/>-->
+<!--<xsl:strip-space elements="classCode"/>-->
 <!-- normalize-space() -->
 
 
-    <!-- Identity transform 
-    <xsl:template match="@*|*|text()|processing-instruction()">
-        <xsl:copy>
-            <xsl:apply-templates select="@*|*|text()|processing-instruction()"/>
-        </xsl:copy>
-    </xsl:template>-->
-
+    <!-- Main document structure and more or less directly transferred elements -->
 
     <xsl:template match="/">
 
-    <TEI encoding="utf-8" xmlns="http://www.tei-c.org/ns/1.0">
+    <TEI xmlns="http://www.tei-c.org/ns/1.0">
 
         <teiHeader>
 
@@ -39,11 +33,15 @@
                             <forename>Barbaresi</forename>
                         </persName>
                     </editor>
+                    <respStmt>
+                      <resp/>
+                      <orgName>Berlin-Brandenburgische Akademie der Wissenschaften</orgName>
+                    </respStmt>
                 </titleStmt>
-                <respStmt>
-                    <orgName>Berlin-Brandenburgische Akademie der Wissenschaften</orgName>
-                </respStmt>
 
+                <publicationStmt>
+                  <publisher>Berlin-Brandenburgische Akademie der Wissenschaften</publisher>
+                </publicationStmt>
 
                 <sourceDesc>
                     <biblFull>
@@ -65,48 +63,31 @@
                                     <xsl:value-of select="//author"/>
                                 </persName>
                             </author>
-                        </titleStmt>
-
-                        <editionStmt>
                             <editor>
                                 <persName>
                                     <xsl:value-of select="//last_modified_by"/>
                                 </persName>
                             </editor>
-                        </editionStmt>
+                        </titleStmt>
 
                         <publicationStmt>
                             <date type="publication">
                                 <xsl:value-of select="//date"/> 
                             </date>
-                            <url type="web page URL">
+                            <idno type="URL">
                                 <xsl:value-of select="//source"/> 
-                            </url>
-                            <idno type="ZEIT uuid">
+                            </idno>
+                            <idno type="UUID">
                                 <xsl:value-of select="//uuid"/> 
                             </idno>
                         </publicationStmt>
 
                         <seriesStmt>
-                            <bibl>
-                                <biblScope unit="year">
-                                    <xsl:value-of select="//year"/>
-                                </biblScope>
-                                <biblScope unit="volume">
-                                    <xsl:value-of select="//volume"/>
-                                </biblScope>
-                                <xsl:for-each select="/root/head/ressort">
-                                    <term type="ressort">
-                                        <xsl:value-of select="."/> <!--<xsl:value-of select="//ressort"/>-->
-                                    </term>
-                                </xsl:for-each>
-
-                                <xsl:for-each select="/root/head/subressort">
-                                    <term type="subressort">
-                                        <xsl:value-of select="."/>
-                                    </term>
-                                </xsl:for-each>
-                            </bibl>
+                            <title>DIE ZEIT</title>
+                            <xsl:apply-templates select="/root/head/year"/>
+                            <xsl:apply-templates select="/root/head/volume"/>
+                            <xsl:apply-templates select="/root/head/ressort"/>
+                            <xsl:apply-templates select="/root/head/subressort"/>
                         </seriesStmt>
 
                     </biblFull>
@@ -116,38 +97,18 @@
             <profileDesc>
                 <textClass>
                     <!-- Metatype -->
-                    <xsl:choose>
-                        <xsl:when test="/root/metatype">
-                            <classCode><xsl:value-of select="/root/metatype"/></classCode>
-                        </xsl:when>
-                        <xsl:otherwise>
-                            <classCode>missing</classCode>
-                        </xsl:otherwise>
-                     </xsl:choose>
-                     <!--   <xsl:if test="not(metatype)">
-                            <kind>missing</kind>
-                        </xsl:if>
-                        <xsl:if test="/root/metatype">
-                            <kind><xsl:value-of select="//metatype"/></kind>
-                        </xsl:if>-->
+                    <xsl:apply-templates select="/root"/>
 
                     <!-- Keywords -->
                     <keywords>
                         <xsl:for-each select="/root/head/keyword">
                             <term type="keyword">
-                                <xsl:value-of select="."/> <!--<xsl:value-of select="//ressort"/>-->
-                            </term>
-                        </xsl:for-each>
-                        <xsl:for-each select="/root/head/tag">
-                            <term type="tag">
                                 <xsl:value-of select="."/>
                             </term>
                         </xsl:for-each>
-                        <!--<xsl:apply-templates select="/root/head/tag"/>
-http://www.tei-c.org/release/doc/tei-p5-doc/de/html/ref-att.canonical.html
-http://www.tei-c.org/release/doc/tei-p5-doc/de/html/ref-idno.html
-http://www.tei-c.org/release/doc/tei-p5-doc/de/html/ref-textClass.html
-                        -->
+
+                        <xsl:apply-templates select="/root/head/tag"/>
+
                     </keywords>
                 </textClass>
             </profileDesc>
@@ -157,42 +118,53 @@ http://www.tei-c.org/release/doc/tei-p5-doc/de/html/ref-textClass.html
         </teiHeader>
         <text>
             <body>
-
-        <!--<xsl:apply-templates select="body"/>-->
-            <xsl:apply-templates select="//body"/>
+                <xsl:apply-templates select="//body"/>
             </body>
         </text>
 
     </TEI>
-
-
-
     </xsl:template>
 
 
+    <!-- Everything that has to be transformed noticeably -->
+
     <!-- Header -->
 
+    <xsl:template match="/root/head/year | /root/head/volume | /root/head/ressort | /root/head/subressort">
+        <biblScope unit="{local-name()}">
+            <xsl:apply-templates select="node()"/>
+        </biblScope>
+    </xsl:template>
 
+    <xsl:template match="/root">
+        <xsl:choose>
+            <xsl:when test="/root/metatype">
+                <classCode scheme=""><xsl:value-of select="/root/metatype"/></classCode>
+            </xsl:when>
+            <xsl:otherwise>
+                <classCode scheme="">missing</classCode>
+            </xsl:otherwise>
+        </xsl:choose>
+    </xsl:template>
 
-    <!--<xsl:template match="/root/head/tag">
-            <xsl:apply-templates select="node()|@*"/>
-        <xsl:element name="tag">
-
-        </xsl:element>
-    </xsl:template>-->
+    <xsl:template match="/root/head/tag">
+        <term type="keyword">
+            <measure quantity="{@score}"/>
+            <xsl:apply-templates select="node()"/>
+        </term>
+    </xsl:template>
 
 
     <!-- Body and actual text -->
 
     <xsl:template match="body">
-        <xsl:apply-templates select="node()|@*"/>
+        <xsl:apply-templates select="@* | node()"/>
     </xsl:template>
-
 
     <xsl:template match="title">
         <floatingText type="title">
             <body>
-                <xsl:apply-templates select="@* | node()"/>
+                <p><xsl:apply-templates select="@* | node()"/></p>
             </body>
         </floatingText>
     </xsl:template>
@@ -200,7 +172,7 @@ http://www.tei-c.org/release/doc/tei-p5-doc/de/html/ref-textClass.html
     <xsl:template match="intertitle">
         <floatingText type="intertitle">
             <body>
-                <xsl:apply-templates select="@* | node()"/>
+                <p><xsl:apply-templates select="@* | node()"/></p>
             </body>
         </floatingText>
     </xsl:template>
@@ -213,9 +185,14 @@ http://www.tei-c.org/release/doc/tei-p5-doc/de/html/ref-textClass.html
 
     <xsl:template match="em | strong">
         <xsl:element name="hi">
-            <!--<xsl:value-of select="."/>-->
             <xsl:apply-templates select="@* | node()"/>
         </xsl:element>
+    </xsl:template>
+
+    <xsl:template match="a">
+        <ref target="{@href}">
+            <xsl:apply-templates select="node()"/>
+        </ref>
     </xsl:template>
 
 
