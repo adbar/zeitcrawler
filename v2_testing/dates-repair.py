@@ -27,6 +27,10 @@ outputlist = list()
 
 # fill dates function
 def filldate(year, week):
+    # deal with weeks > 52
+    if int(week) > 52:
+        week = '52'    
+    # analyze
     data = strptime(year + ' ' + week + ' 1', '%Y %W %w')
     year = str(data[0])
     if len(str(data[1])) == 1:
@@ -77,17 +81,17 @@ with open('dates', 'r') as inputfh:
 
         # split in columns
         columns = line.split('\t')
-        if len(columns) > 5:
+        if len(columns) != 5:
             invalid_cols += 1
+            print (line)
+            continue
 
-        # correct month
-        columns[1] = correct_month(columns[1])
-
+        ## dictionary
         # put only plausible dates in dictionary
         try:
-            if int(columns[0]) > 1945 and int(columns[0]) < 2020 and int(columns[1]) > 0 and int(columns[1]) < 60 and re.search(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', columns[2]):
+            if mismatch is False and int(columns[0]) > 1945 and int(columns[0]) < 2020 and int(columns[1]) > 0 and int(columns[1]) < 60 and re.search(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', columns[2]):
                 # build strings
-                key = str(columns[0]) + '-' + str(columns[1])
+                key = str(columns[0]) + '-' + correct_month(columns[1])
                 value = columns[2]
                 year = int(columns[2].split('-')[0])
                 # does the date match the year ?
@@ -114,6 +118,47 @@ with open('dates', 'r') as inputfh:
         except ValueError:
             value_errors += 1
 
+
+        ## Corrections and normalization
+        # correct month
+        columns[1] = correct_month(columns[1])
+
+        # correct news URLs
+        if re.match(r'[0-9]{4}/[0-9]{2} [0-9]+$', columns[3]):
+            columns[3] = re.sub(r' [0-9]+$', '', columns[3])
+
+        # double year in first column
+        if re.match(r'[0-9]+ [0-9]+$', columns[0]):
+            temp = columns[0].split(' ')
+            if int(temp[0]) == int(temp[1]):
+                columns[0] = temp[0]
+                repaired(True)
+            else:
+                mismatch = True
+        # same date twice in second column
+        if re.match(r'[0-9]+ [0-9]+$', columns[1]):
+            temp = columns[1].split(' ')
+            if int(temp[0]) == int(temp[1]):
+                columns[1] = temp[0]
+                repaired(True)
+            else:
+                mismatch = True
+        # dots instead of hyphens in date
+        if re.match(r'[0-9]+\.[0-9]+\.[0-9]+$', columns[2]):
+            temp = columns[2].split('.')
+            columns[2] = str(temp[2]) + '-' + str(correct_month(temp[1])) + '-' + str(correct_month(temp[0]))
+            if re.match(r'[0-9]{4}$', columns[0]):
+                if temp[2] == columns[0]:
+                    repaired(True)
+                else:
+                    mismatch = True
+            else:
+                # force replacement of year
+                columns[2] = str(temp[2]) + '-' + str(correct_month(temp[1])) + '-' + str(correct_month(temp[0]))
+                columns[0] = temp[2]
+                repaired(True)
+
+        ## Repair fields
         # fill date if necessary
         if str(columns[2]) is '0':
             if re.match(r'[0-9]{4}$', columns[0]) and re.match(r'[0-9]{2}$', columns[1]):
@@ -125,10 +170,67 @@ with open('dates', 'r') as inputfh:
                     columns[2] = filldate(columns[0], columns[1])
                     repaired(True)
             else:
-                no_date += 1
+                # no date at all
+                if columns[0] is '0' and re.match(r'0+', columns[1]) and columns[3] is '0':
+                    no_date += 1
+                    columns[1] = '0'
+                    listerrors.append('\t'.join(columns))
+                    continue
+                # double year + double month
+                elif re.match(r'[0-9]{4} [0-9]{4}$', columns[0]) and re.match(r'[0-9]{2} [0-9]{2}$', columns[1]) and re.match(r'[0-9]{4}/[0-9]{2}$', columns[3]):
+                    # week could be reliable
+                    temp = columns[3].split('/')
+                    columns[0] = temp[0]
+                    columns[1] = temp[1]
+                    columns[2] = filldate(temp[0], temp[1])
+                    repaired(True)
+                else:
+                    # use URL
+                    if re.match(r'[0-9]{4}/[0-9]{2}$', columns[3]):
+                        temp = columns[3].split('/')
+                        columns[0] = temp[0]
+                        columns[1] = temp[1]
+                        columns[2] = filldate(temp[0], temp[1])
+                        repaired(True)
+                    else:
+                        no_date += 1
+                        listerrors.append('\t'.join(columns))
+                        continue
+        # no date in URL
+        elif str(columns[3]) is '0':
+            # news with just date
+            if columns[0] is '0' and re.match(r'0+', columns[1]) and re.match(r'[0-9]{4}-[0-9]{2}-[0-9]{2}$', columns[2]) and columns[3] is '0':
+                temp = columns[2].split('-')
+                columns[0] = temp[0]
+                columns[1] = '0'
+                repaired(False)
+            # no week
+            elif re.match(r'0+$', columns[1]):
+                temp = columns[2].split('-')
+                columns[0] = temp[0]
+                columns[1] = '0'
+                repaired(False)
+            # try to repair
+            else:
+                temp = columns[2].split('-')
+                # probably not a problem
+                if temp[0] == columns[0]:
+                    repaired(False)
+                # repair
+                else:
+                    try:
+                        columns[0] = temp[0]
+                        columns[1] = temp[1]
+                        columns[2] = filldate(columns[0], columns[1])
+                        repaired(True)
+                    except IndexError:
+                        print ('#####')
+                        print (line)
+                        print ('\t'.join(columns))
+                        print ('#####')
         # easy cases
         else:
-            # news with no week
+            # 0/1900 news with no week
             if re.match(r'1?9?0+$', columns[0]) and re.match(r'0+', columns[1]) and re.match(r'[0-9]{4}-[0-9]{2}-[0-9]{2}$', columns[2]) and re.match(r'[0-9]{4}-[0-9]{2}$', columns[3]):
                 temp = columns[2].split('-')
                 columns[0] = temp[0]
@@ -136,32 +238,11 @@ with open('dates', 'r') as inputfh:
                 repaired(False)
                 outputlist.append('\t'.join(columns))
                 continue
-            # double year in first column
-            if re.match(r'[0-9]+ [0-9]+$', columns[0]):
-                temp = columns[0].split(' ')
-                if int(temp[0]) == int(temp[1]):
-                    columns[0] = temp[0]
-                    repaired(True)
-                else:
-                    mismatch = True
-            # same date twice in second column
-            if re.match(r'[0-9]+ [0-9]+$', columns[1]):
-                temp = columns[1].split(' ')
-                if int(temp[0]) == int(temp[1]):
-                    columns[1] = temp[0]
-                    repaired(True)
-                else:
-                    mismatch = True
-            # dots instead of hyphens in date
-            if re.match(r'[0-9]+\.[0-9]+\.[0-9]+$', columns[2]):
-                temp = columns[2].split('.')
-                temp[1] = correct_month(temp[1])
-                temp[0] = correct_month(temp[0])
-                if temp[2] == columns[0]:
-                    columns[2] = str(temp[2]) + str(temp[1]) + str(temp[0])
-                    repaired(True)
-                else:
-                    mismatch = True
+
+            # no week
+            elif re.match(r'[0-9]{4}$', columns[0]) and re.match(r'0+', columns[1]) and re.match(r'[0-9]{4}-[0-9]{2}-[0-9]{2}$', columns[2]) and re.match(r'[0-9]{4}[/-][0-9]{2}$', columns[3]):
+                # use URL
+                mismatch = True
             # rare cases where year == 20
             if not re.match(r'[0-9]{4}$', columns[0]) and not re.match(r'0$', columns[0]):
                 if re.match(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', columns[2]):
@@ -169,6 +250,13 @@ with open('dates', 'r') as inputfh:
                     columns[0] = columns[2].split('-')[0]
                     # year = dparse[0]
                     repaired(True)
+            # catch the rest (news)
+            if columns[0] is '0' and re.match(r'0+$', columns[1]):
+                temp = columns[2].split('-')
+                columns[0] = temp[0]
+                columns[1] = '0'
+                repaired(True)
+            
 
         # year columns do not match
         if mismatch is True:
@@ -179,24 +267,49 @@ with open('dates', 'r') as inputfh:
                 columns[1] = temp[1]
                 columns[2] = filldate(columns[0], columns[1])
                 repaired(True)
-                
+            elif re.match(r'[0-9]{4}-[0-9]{2}$', columns[3]):
+                temp = columns[3].split('-')
+                if columns[0] == temp[0]:
+                    # week could be reliable
+                    columns[2] = filldate(columns[0], columns[1])
+                    repaired(True)
+                else:
+                    # replace date by 1st of January
+                    columns[0] = temp[0]
+                    columns[1] = '01'
+                    columns[2] = str(temp[0]) + '-01-02'
+                    # columns[4] = 'GAGA'
+                    repaired(True)
+
+        # catchall: expeditive fix for dates that do not match
+        if re.match(r'[0-9]{4}_[0-9]{2}$', columns[3]):
+            if columns[0] is '0': # does not work
+                temp = columns[3].split('_')
+                columns[0] = temp[0]
+                columns[1] = temp[1]
+            columns[2] = filldate(columns[0], columns[1])
+            repaired(True)
+        if re.search(r' -$', columns[2]):
+            columns[2] = filldate(columns[0], columns[1])
+            repaired(True)
+
         # flag
         if repair_bool is False:
             norepairs += 1
-            listerrors.append(line)
+            listerrors.append('\t'.join(columns)) # line
             # print ('warning:', key, value, dictdates[key])
+        else:
+            # output
+            outputlist.append('\t'.join(columns))
 
-        # output
-        outputlist.append('\t'.join(columns))
 
 
-
-print ('Total:', total)
-print ('Date NA:', no_date)
-print ('Invalid column number:', invalid_cols)
-print ('Value errors:', value_errors)
-print ('Repaired:', repair_count)
-print ('Repair failed:', norepairs)
+print ('Total:\t\t', total)
+print ('Invalid columns:', invalid_cols)
+print ('Value errors:\t', value_errors)
+print ('Repaired:\t', repair_count)
+print ('Date NA:\t', no_date)
+print ('Repair failed:\t', norepairs)
 
 with open('sorted-dates', 'w') as outputfh:
     for item in sorted(dictdates):
